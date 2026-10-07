@@ -1,0 +1,13 @@
+{
+  "name": "hotspot-guard-app-e2e",
+  "version": "0.1.0",
+  "private": true,
+  "description": "End-to-end tests that drive the real Hotspot Guard app through tauri-driver",
+  "type": "module",
+  "scripts": {
+    "test": "node --test --test-concurrency=1 tests/app.test.mjs"
+  },
+  "devDependencies": {
+    "selenium-webdriver": "4.50.0"
+  }
+}
