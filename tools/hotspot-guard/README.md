@@ -78,11 +78,15 @@ The app copies the default allowlist into the first location the first time it r
 
 ### Status
 
-Built and run on Linux. The window was checked under a virtual display: the
-states, the preview sheet, the alerts and the watcher-failure path. The
-macOS and Windows builds have not been run yet, and neither has the elevation
-path on those systems. Try `cargo tauri build` on each, and report any
-problems you hit.
+- **Linux**: `cargo tauri build --debug --bundles deb` produces a `.deb` that
+  contains the engine. The window was checked under a virtual display: the
+  states, the preview sheet, the alerts and the watcher-failure path. The
+  elevation path has only been checked for its failure case, with `pkexec` absent.
+- **Windows**: the Rust code type-checks for the Windows target. It has not been run.
+- **macOS**: not type-checked, because its Objective-C dependencies need the Apple
+  SDK. Not run either.
+
+Try `cargo tauri build` on macOS and Windows, and report any problems you hit.
 
 ## Command line
 
