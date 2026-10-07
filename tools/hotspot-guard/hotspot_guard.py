@@ -68,6 +68,7 @@ def load_config(path):
         "allow_local_network": parser.getboolean("settings", "allow_local_network", fallback=True),
         "refresh_seconds": max(60, parser.getint("settings", "refresh_seconds", fallback=300)),
         "keep_addresses_hours": parser.getfloat("settings", "keep_addresses_hours", fallback=6.0),
+        "nat64_prefix": parser.get("settings", "nat64_prefix", fallback="auto").strip().lower(),
     }
     networks, names = set(), set()
     for section in parser.sections():
@@ -149,6 +150,51 @@ def remember(state, fresh, keep_hours):
     return list(seen)
 
 
+def nat64_prefix_for(setting):
+    """The NAT64 /96 prefix that IPv4 destinations are reached through, or None.
+
+    'off' turns the feature off. 'auto' asks the network (RFC 7050). Anything else must be
+    an IPv6 /96 prefix, for carriers where the auto check does not work.
+    """
+    if setting == "off":
+        return None
+    if setting == "auto":
+        return discover_nat64_prefix()
+    try:
+        prefix = ipaddress.IPv6Network(setting, strict=False)
+    except ValueError:
+        sys.exit(f"[settings] nat64_prefix must be auto, off or an IPv6 /96 prefix: {setting}")
+    if prefix.prefixlen != 96:
+        sys.exit(f"[settings] nat64_prefix must be a /96 prefix: {setting}")
+    return prefix
+
+
+def discover_nat64_prefix():
+    """RFC 7050: ipv4only.arpa only has IPv6 addresses on a NAT64 network, and they embed
+    the well-known IPv4 addresses 192.0.0.170 or 192.0.0.171. The prefix is what is left
+    once those last 32 bits are cleared."""
+    try:
+        infos = socket.getaddrinfo("ipv4only.arpa", None, socket.AF_INET6)
+    except OSError:
+        return None
+    for info in infos:
+        value = int(ipaddress.IPv6Address(info[4][0].split("%")[0]))
+        if str(ipaddress.IPv4Address(value & 0xFFFFFFFF)) in ("192.0.0.170", "192.0.0.171"):
+            return ipaddress.IPv6Network((value & ~0xFFFFFFFF, 96))
+    return None
+
+
+def synthesize_nat64(networks, prefix):
+    """IPv6 networks that reach each IPv4 network through the NAT64 gateway (RFC 6052, /96)."""
+    out = []
+    for net in networks:
+        parsed = ipaddress.ip_network(net, strict=False)
+        if parsed.version == 4:
+            value = int(prefix.network_address) | int(parsed.network_address)
+            out.append(str(ipaddress.IPv6Network((value, 96 + parsed.prefixlen))))
+    return out
+
+
 def allowed_networks(settings, networks, addresses):
     everything = set(networks) | set(addresses) | set(LOOPBACK)
     if settings["allow_local_network"]:
@@ -161,11 +207,18 @@ def allowed_networks(settings, networks, addresses):
 
 
 def current_networks(config_path, state):
-    """Resolve the allowlist. Returns (networks, fresh, failed, settings) and updates the address memory."""
+    """Resolve the allowlist. Returns (networks, fresh, failed, settings) and updates the address memory.
+
+    On an IPv6-only network an IPv4 destination is reached through its NAT64 address, so each
+    allowed IPv4 network is also allowed under the NAT64 prefix. The prefix is recorded in the state.
+    """
     settings, networks, names = load_config(config_path)
     fresh, failed = resolve(names)
     addresses = remember(state, fresh, settings["keep_addresses_hours"])
-    return allowed_networks(settings, networks, addresses), fresh, failed, settings
+    prefix = nat64_prefix_for(settings["nat64_prefix"])
+    state["nat64_prefix"] = str(prefix) if prefix else None
+    extra = synthesize_nat64(list(networks) + addresses, prefix) if prefix else []
+    return allowed_networks(settings, set(networks) | set(extra), addresses), fresh, failed, settings
 
 
 def load_state():
@@ -357,6 +410,7 @@ def status(as_json=False):
             "remembered": len(state.get("seen", {})),
             "backend": backend.name,
             "log_file": str(LOG_FILE),
+            "nat64_prefix": state.get("nat64_prefix"),
         }))
         return
     on = backend.is_active(state)

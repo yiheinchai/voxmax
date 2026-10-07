@@ -1,8 +1,10 @@
 """Tests for hotspot-guard. Run from this directory: python3 -m unittest -v"""
 
 import io
+import ipaddress
 import json
 import os
+import socket
 import shutil
 import subprocess
 import tempfile
@@ -240,6 +242,57 @@ class CliJsonTests(unittest.TestCase):
         self.assertFalse(data["watching"])
         self.assertEqual(data["remembered"], 1)
         self.assertTrue(data["log_file"].endswith("watch.log"))
+
+
+class Nat64Tests(unittest.TestCase):
+    PREFIX = ipaddress.IPv6Network("64:ff9b::/96")
+
+    def test_synthesizes_ipv4_destinations_under_the_prefix(self):
+        self.assertEqual(hg.synthesize_nat64(["203.0.113.10/32", "2001:db8::1/128"], self.PREFIX),
+                         ["64:ff9b::cb00:710a/128"])
+
+    def test_synthesizes_ipv4_ranges(self):
+        self.assertEqual(hg.synthesize_nat64(["10.0.0.0/8"], self.PREFIX), ["64:ff9b::a00:0/104"])
+
+    def test_discovers_prefix_from_ipv4only_arpa(self):
+        answer = [(socket.AF_INET6, 0, 0, "", ("64:ff9b::c000:aa", 0, 0, 0))]  # embeds 192.0.0.170
+        with mock.patch.object(hg.socket, "getaddrinfo", return_value=answer):
+            self.assertEqual(hg.discover_nat64_prefix(), self.PREFIX)
+
+    def test_no_prefix_when_ipv4only_arpa_is_not_nat64(self):
+        answer = [(socket.AF_INET6, 0, 0, "", ("2001:db8::1", 0, 0, 0))]
+        with mock.patch.object(hg.socket, "getaddrinfo", return_value=answer):
+            self.assertIsNone(hg.discover_nat64_prefix())
+
+    def test_no_prefix_when_lookup_fails(self):
+        with mock.patch.object(hg.socket, "getaddrinfo", side_effect=socket.gaierror("offline")):
+            self.assertIsNone(hg.discover_nat64_prefix())
+
+    def test_setting_values(self):
+        self.assertIsNone(hg.nat64_prefix_for("off"))
+        self.assertEqual(hg.nat64_prefix_for("64:ff9b::/96"), self.PREFIX)
+        with self.assertRaises(SystemExit):
+            hg.nat64_prefix_for("64:ff9b::/64")
+        with self.assertRaises(SystemExit):
+            hg.nat64_prefix_for("not-a-prefix")
+
+    def test_current_networks_adds_nat64_destinations(self):
+        cfg = temp_file("[settings]\nnat64_prefix = 64:ff9b::/96\n[custom]\nenabled = yes\n"
+                        "domains =\n    203.0.113.10\n")
+        state = {}
+        with mock.patch.object(hg, "resolve", return_value=({}, [])):
+            networks, _, _, _ = hg.current_networks(cfg, state)
+        self.assertIn("203.0.113.10/32", networks)
+        self.assertIn("64:ff9b::cb00:710a/128", networks)
+        self.assertEqual(state["nat64_prefix"], "64:ff9b::/96")
+
+
+class DhcpV6Tests(unittest.TestCase):
+    def test_every_backend_allows_dhcpv6(self):
+        directory = Path(tempfile.mkdtemp())
+        self.assertIn("udp dport { 53, 67, 547 } accept", firewall.NftBackend(directory).render([]))
+        self.assertIn("from any port 546 to any port 547", firewall.PF_ANCHOR_RULES)
+        self.assertIn("-LocalPort 546 -RemotePort 547", firewall.WindowsBackend(directory).render([]))
 
 
 class StopWatcherTests(unittest.TestCase):

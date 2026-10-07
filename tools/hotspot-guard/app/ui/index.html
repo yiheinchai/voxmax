@@ -25,6 +25,10 @@
           <span>Activity</span>
         </button>
       </nav>
+      <div class="sidebar-footer" aria-live="polite">
+        <span class="status-dot" id="sidebar-dot" aria-hidden="true"></span>
+        <span id="sidebar-status">Checking…</span>
+      </div>
     </aside>
 
     <main class="content">
@@ -92,6 +96,10 @@
             <div class="row">
               <div class="row-title">Last applied</div>
               <div class="row-value" id="applied-value">—</div>
+            </div>
+            <div class="row">
+              <div class="row-title">IPv6 translation (NAT64)</div>
+              <div class="row-value" id="nat64-value">—</div>
             </div>
           </div>
         </section>

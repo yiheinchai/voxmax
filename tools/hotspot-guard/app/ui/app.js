@@ -13,6 +13,7 @@ const state = {
   pending: false,      // group changes made while blocking that are not applied yet
   busy: false,         // an action is running (possibly waiting for an admin prompt)
   busyMessage: "",     // shown under the switch while busy
+  loaded: false,       // true once the first read has succeeded
   switchTarget: null,  // the position the user asked for while an action runs
   pane: "blocking",
 };
@@ -95,7 +96,12 @@ function render() {
   $("clear-btn").disabled = state.busy;
   $("preview-btn").disabled = state.busy;
 
+  const sidebarText = { unknown: "Checking…", off: "Blocking off", on: "Blocking on", stale: "Rules still active" }[bs];
+  $("sidebar-status").textContent = sidebarText;
+  $("sidebar-dot").className = `status-dot${on ? " is-on" : ""}${bs === "stale" ? " is-stale" : ""}`;
+
   $("watcher-value").textContent = status.watching ? `Running (pid ${status.watcher_pid})` : "Not running";
+  $("nat64-value").textContent = status.nat64_prefix || (status.active ? "Not used" : "—");
   $("addresses-value").textContent = status.remembered != null ? String(status.remembered) : "—";
   $("applied-value").textContent = status.applied_at
     ? new Date(status.applied_at * 1000).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })
@@ -105,6 +111,16 @@ function render() {
 }
 
 function renderGroups() {
+  if (!state.loaded) {
+    $("groups-list").innerHTML = '<div class="row placeholder"><div class="row-title muted">Loading…</div></div>';
+    return;
+  }
+  if (state.groups.length === 0) {
+    $("groups-list").innerHTML = `<div class="row placeholder"><div class="row-text">
+      <div class="row-title">No groups yet</div>
+      <div class="row-sub">Add domains or IP ranges to a group with Edit Allowlist.</div></div></div>`;
+    return;
+  }
   $("groups-list").innerHTML = state.groups.map((group) => {
     const name = titleCase(group.name);
     const count = group.domain_count === 1 ? "1 entry" : `${group.domain_count} entries`;
@@ -146,6 +162,7 @@ async function refresh() {
     const [status, groups] = await Promise.all([invoke("engine_status"), invoke("engine_groups")]);
     state.status = status;
     state.groups = groups;
+    state.loaded = true;
     if (blockState(status) !== "on") state.pending = false;
     showBanner("");
   } catch (error) {

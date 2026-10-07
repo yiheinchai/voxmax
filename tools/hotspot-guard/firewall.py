@@ -49,6 +49,7 @@ PF_ANCHOR_RULES = (
     f"table <{PF_TABLE}> persist\n"
     "pass out quick on lo0 all\n"
     "pass out quick inet proto udp from any port 68 to any port 67 keep state\n"
+    "pass out quick inet6 proto udp from any port 546 to any port 547 keep state\n"
     "pass out quick proto { tcp udp } to any port 53 keep state\n"
     "pass out quick inet proto icmp all keep state\n"
     "pass out quick inet6 proto icmp6 all keep state\n"
@@ -144,7 +145,7 @@ class NftBackend:
             "    type filter hook output priority 0; policy drop;",
             "    oif lo accept",
             "    ct state established,related accept",
-            "    udp dport { 53, 67 } accept",
+            "    udp dport { 53, 67, 547 } accept",
             "    tcp dport 53 accept",
             "    ip protocol icmp accept",
             "    ip6 nexthdr icmpv6 accept",
@@ -184,6 +185,7 @@ WIN_EXTRA_RULES = [
     "-DisplayName 'HotspotGuard DNS (UDP)' -Protocol UDP -RemotePort 53",
     "-DisplayName 'HotspotGuard DNS (TCP)' -Protocol TCP -RemotePort 53",
     "-DisplayName 'HotspotGuard DHCP' -Protocol UDP -LocalPort 68 -RemotePort 67",
+    "-DisplayName 'HotspotGuard DHCPv6' -Protocol UDP -LocalPort 546 -RemotePort 547",
     "-DisplayName 'HotspotGuard ICMPv4' -Protocol ICMPv4",
     "-DisplayName 'HotspotGuard ICMPv6' -Protocol ICMPv6",
 ]

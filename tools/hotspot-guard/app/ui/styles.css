@@ -159,6 +159,27 @@ button, input { font: inherit; color: inherit; }
 
 .sidebar-item.is-selected svg { stroke: var(--sidebar-selected-text); }
 
+.sidebar-footer {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 9px 2px;
+  font-size: 12px;
+  color: var(--secondary);
+}
+
+.status-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--switch-off);
+}
+
+.status-dot.is-on { background: var(--green); }
+.status-dot.is-stale { background: var(--orange); }
+
 .content {
   display: flex;
   flex-direction: column;
@@ -479,6 +500,18 @@ button, input { font: inherit; color: inherit; }
 [data-platform="macos"] .toolbar { padding-left: 20px; }
 
 [data-platform="macos"] .sidebar-item { padding: 5px 9px; }
+
+/* Empty and loading states inside a grouped list */
+.row.placeholder { justify-content: center; text-align: center; }
+.row.placeholder .row-title { flex: none; }
+
+/* Respect the system setting for reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
 
 /* Windows and Linux draw their own title bar, so the sidebar gets a plain background. */
 [data-platform="windows"] .sidebar-chrome,
