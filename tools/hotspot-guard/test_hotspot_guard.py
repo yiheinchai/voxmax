@@ -1,11 +1,16 @@
 """Tests for hotspot-guard. Run from this directory: python3 -m unittest -v"""
 
+import io
+import json
+import os
 import shutil
 import subprocess
 import tempfile
 import time
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
+from unittest import mock
 
 import firewall
 import hotspot_guard as hg
@@ -133,6 +138,107 @@ class NftSyntaxTests(unittest.TestCase):
         if result.returncode != 0 and "Operation not permitted" in result.stderr:
             self.skipTest("nft check mode needs CAP_NET_ADMIN here")
         self.assertEqual(result.returncode, 0, result.stderr)
+
+
+def temp_file(text, name="test.ini"):
+    directory = tempfile.mkdtemp()
+    path = Path(directory) / name
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+GROUP_CONFIG = (
+    "# keep this comment\n"
+    "[settings]\n"
+    "refresh_seconds = 300\n"
+    "\n"
+    "[social]\n"
+    "enabled = yes\n"
+    "description = Social\n"
+    "domains =\n"
+    "    example.com\n"
+    "\n"
+    "[dev]\n"
+    "enabled = no\n"
+    "domains =\n"
+    "    github.com\n"
+)
+
+
+class GroupEditTests(unittest.TestCase):
+    def test_list_groups_reports_state_and_counts(self):
+        rows = {row["name"]: row for row in hg.list_groups(temp_file(GROUP_CONFIG))}
+        self.assertEqual(set(rows), {"social", "dev"})
+        self.assertTrue(rows["social"]["enabled"])
+        self.assertEqual(rows["social"]["domain_count"], 1)
+        self.assertEqual(rows["social"]["description"], "Social")
+        self.assertFalse(rows["dev"]["enabled"])
+        self.assertEqual(rows["dev"]["description"], "")
+
+    def test_set_group_changes_only_the_enabled_line(self):
+        path = temp_file(GROUP_CONFIG)
+        before = path.read_text().splitlines()
+        hg.set_group(path, "dev", True)
+        after = path.read_text().splitlines()
+        self.assertEqual(len(before), len(after))
+        changed = [(a, b) for a, b in zip(before, after) if a != b]
+        self.assertEqual(changed, [("enabled = no", "enabled = yes")])
+        self.assertIn("# keep this comment", after)
+        self.assertTrue(hg.list_groups(path)[1]["enabled"])
+
+    def test_set_group_rejects_unknown_names_and_settings(self):
+        path = temp_file(GROUP_CONFIG)
+        with self.assertRaises(SystemExit):
+            hg.set_group(path, "nope", True)
+        with self.assertRaises(SystemExit):
+            hg.set_group(path, "settings", True)
+
+
+class WatcherTests(unittest.TestCase):
+    def test_missing_pid_file_means_not_watching(self):
+        with mock.patch.multiple(hg, PID_FILE=Path("/nonexistent/watch.pid"), SYSTEM="Linux"):
+            self.assertIsNone(hg.watcher_pid())
+
+    def test_pid_of_an_unrelated_process_is_not_trusted(self):
+        # A live pid that is not a hotspot-guard watch command must never be signalled.
+        pid_file = temp_file(str(os.getpid()), name="watch.pid")
+        with mock.patch.multiple(hg, PID_FILE=pid_file, SYSTEM="Linux"):
+            self.assertIsNone(hg.watcher_pid())
+
+
+class CliJsonTests(unittest.TestCase):
+    def test_plan_json(self):
+        path = temp_file("[x]\nenabled = yes\ndomains =\n    example.com\n    gone.example\n")
+        out = io.StringIO()
+        with mock.patch.object(hg, "resolve", return_value=({"1.2.3.4": "example.com"}, ["gone.example"])), \
+                redirect_stdout(out):
+            hg.main(["--config", str(path), "plan", "--json"])
+        data = json.loads(out.getvalue())
+        self.assertEqual(data["addresses"], [{"host": "example.com", "ip": "1.2.3.4"}])
+        self.assertEqual(data["failed"], ["gone.example"])
+        self.assertGreater(data["networks"], 0)
+
+    def test_groups_json_and_set_group_round_trip(self):
+        path = temp_file(GROUP_CONFIG)
+        out = io.StringIO()
+        with redirect_stdout(out):
+            hg.main(["--config", str(path), "groups", "--json"])
+        self.assertEqual([row["name"] for row in json.loads(out.getvalue())], ["social", "dev"])
+        with redirect_stdout(io.StringIO()):
+            hg.main(["--config", str(path), "set-group", "dev", "on"])
+        self.assertTrue(hg.list_groups(path)[1]["enabled"])
+
+    def test_status_json_reads_recorded_state_only(self):
+        state_file = temp_file(json.dumps({"active": True, "applied_at": 1.0, "seen": {"1.1.1.1": 1.0}}),
+                               name="state.json")
+        out = io.StringIO()
+        with mock.patch.multiple(hg, STATE_FILE=state_file, PID_FILE=Path("/nonexistent/watch.pid"), SYSTEM="Linux"), \
+                redirect_stdout(out):
+            hg.main(["status", "--json"])
+        data = json.loads(out.getvalue())
+        self.assertTrue(data["active"])
+        self.assertFalse(data["watching"])
+        self.assertEqual(data["remembered"], 1)
 
 
 if __name__ == "__main__":

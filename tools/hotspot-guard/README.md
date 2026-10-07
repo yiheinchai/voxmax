@@ -51,6 +51,36 @@ Stop refreshing with Ctrl-C. Blocking stays on until you run:
 sudo python3 hotspot_guard.py disable     # Windows: run from elevated PowerShell
 ```
 
+## Desktop app (macOS 26)
+
+`app/` holds a native SwiftUI app styled with Liquid Glass. It drives the same
+Python engine as the command line, so the rules and the tests are shared.
+
+Build it on a Mac with macOS 26 and Xcode 26 (or its command line tools):
+```sh
+cd tools/hotspot-guard/app
+./build-app.sh
+open "build/Hotspot Guard.app"
+```
+
+- Turn blocking on or off, switch allowlist groups, preview the resolved
+  addresses and watch the activity log.
+- Anything that changes the firewall runs as root through the standard macOS
+  password prompt. The app never keeps elevated rights. Group toggles and the
+  preview do not prompt.
+- While blocking is on, a group change waits for **Apply Changes**. Otherwise the
+  watcher picks it up at its next refresh.
+- The allowlist is `~/Library/Application Support/HotspotGuard/hotspot-guard.ini`.
+  **Edit Allowlist** opens it in your text editor.
+- The watcher runs as a background root process. Its log is
+  `/var/db/hotspot-guard/watch.log`. **Turn Off Blocking** stops the watcher and removes the rules.
+- If the watcher has died but the rules are still recorded as active (for example
+  after a crash), the app shows **Rules may still be active**. Use **Clear Rules**.
+
+The app is ad-hoc signed and not notarised, so it is for this Mac only. It uses
+`/usr/bin/python3`. The Swift code was written without Xcode available, so the
+first build may need small fixes. Compiler errors are the first thing to send back.
+
 ## Commands
 
 | Command | What it does |
@@ -60,8 +90,11 @@ sudo python3 hotspot_guard.py disable     # Windows: run from elevated PowerShel
 | `refresh` | Re-resolves names and updates the live rules once. Fails if blocking is off. |
 | `watch` | `apply`, then `refresh` every `refresh_seconds`. Reloads the config file each cycle. |
 | `disable` | Removes every hotspot-guard rule and restores normal networking. |
-| `status` | Shows whether blocking is on. |
+| `status` | Shows whether blocking is on. With sudo it asks the firewall itself. `status --json` reads only what the tool recorded, so it needs no sudo. |
+| `groups` | Lists allowlist groups, whether each is on, and how many entries it has. `--json` for scripts. |
+| `set-group NAME on\|off` | Turns a group on or off in the config. Only that group's `enabled` line changes. Run `refresh` to apply it. |
 
+`plan --json` gives the resolved addresses as JSON. The desktop app uses these.
 Add `--config path/to/file.ini` to any command to use another allowlist.
 
 ## The allowlist (`hotspot-guard.ini`)
