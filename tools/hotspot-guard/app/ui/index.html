@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Hotspot Guard</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="window">
+    <aside class="sidebar">
+      <div class="sidebar-chrome" data-tauri-drag-region></div>
+      <nav class="sidebar-list" aria-label="Sections">
+        <button class="sidebar-item is-selected" data-pane="blocking" aria-current="page">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 3v5c0 4.5-3 8.2-7 10-4-1.8-7-5.5-7-10V6l7-3z"/></svg>
+          <span>Blocking</span>
+        </button>
+        <button class="sidebar-item" data-pane="allowed">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14M5 12h14M5 18h9"/></svg>
+          <span>Allowed Groups</span>
+        </button>
+        <button class="sidebar-item" data-pane="activity">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>
+          <span>Activity</span>
+        </button>
+      </nav>
+    </aside>
+
+    <main class="content">
+      <header class="toolbar" data-tauri-drag-region>
+        <h1 class="toolbar-title" id="pane-title">Blocking</h1>
+        <div class="toolbar-actions">
+          <button class="btn" id="preview-btn">Preview</button>
+          <button class="btn" id="edit-btn">Edit Allowlist</button>
+        </div>
+      </header>
+
+      <div class="banner" id="banner" role="status" hidden></div>
+
+      <div class="pane-scroll">
+        <section class="pane" id="pane-blocking">
+          <div class="hero" id="hero">
+            <div class="hero-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 8.2-7 10-4-1.8-7-5.5-7-10V6l7-3z"/></svg>
+            </div>
+            <div class="hero-text">
+              <h2 id="hero-title">Checking…</h2>
+              <p class="muted" id="hero-detail"></p>
+            </div>
+          </div>
+
+          <div class="group-label">Hotspot Guard</div>
+          <div class="grouped">
+            <div class="row">
+              <div class="row-text">
+                <div class="row-title">Block outbound traffic</div>
+                <div class="row-sub" id="switch-sub">Only enabled groups can connect</div>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="block-switch" aria-label="Block outbound traffic">
+                <span class="track"></span>
+                <span class="thumb"></span>
+              </label>
+            </div>
+            <div class="row" id="apply-row" hidden>
+              <div class="row-text">
+                <div class="row-title">Changes are waiting</div>
+                <div class="row-sub">Apply them now, or they take effect at the next refresh.</div>
+              </div>
+              <button class="btn btn-prominent" id="apply-btn">Apply Changes</button>
+            </div>
+            <div class="row" id="stale-row" hidden>
+              <div class="row-text">
+                <div class="row-title">Rules may still be active</div>
+                <div class="row-sub">The watcher is not running. Clear the rules to restore normal networking.</div>
+              </div>
+              <button class="btn btn-prominent" id="clear-btn">Clear Rules</button>
+            </div>
+          </div>
+
+          <div class="group-label">Status</div>
+          <div class="grouped">
+            <div class="row">
+              <div class="row-title">Watcher</div>
+              <div class="row-value" id="watcher-value">—</div>
+            </div>
+            <div class="row">
+              <div class="row-title">Addresses remembered</div>
+              <div class="row-value" id="addresses-value">—</div>
+            </div>
+            <div class="row">
+              <div class="row-title">Last applied</div>
+              <div class="row-value" id="applied-value">—</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="pane" id="pane-allowed" hidden>
+          <p class="muted intro">Turn a group on to let its destinations through. Turning groups on or off while blocking
+            is on takes effect at the next refresh, or straight away with Apply Changes.</p>
+          <div class="group-label">Groups</div>
+          <div class="grouped" id="groups-list"></div>
+          <p class="muted footnote">A name matches only itself. Subdomains must be listed separately in the allowlist.</p>
+        </section>
+
+        <section class="pane" id="pane-activity" hidden>
+          <div class="group-label">Watcher log</div>
+          <div class="grouped log">
+            <pre id="log">No activity yet.</pre>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <div class="overlay" id="sheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+      <div>
+        <h2 id="sheet-title">Resolved addresses</h2>
+        <p class="muted" id="sheet-summary"></p>
+      </div>
+      <div class="grouped sheet-list"><ul id="plan-list"></ul></div>
+      <p class="warn" id="plan-failed" hidden></p>
+      <div class="sheet-actions">
+        <button class="btn btn-prominent" id="sheet-done">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="overlay" id="alert" hidden>
+    <div class="alert" role="alertdialog" aria-modal="true" aria-labelledby="alert-title" aria-describedby="alert-text">
+      <h2 id="alert-title">Hotspot Guard</h2>
+      <p id="alert-text"></p>
+      <div class="sheet-actions">
+        <button class="btn btn-prominent" id="alert-ok">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

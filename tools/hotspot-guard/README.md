@@ -4,23 +4,87 @@ Blocks all outbound traffic except an allowlist, so a metered phone hotspot only
 carries what you choose. Software updates, cloud sync and background telemetry
 fail to connect while blocking is on.
 
-Works on macOS (pf), Linux (nftables) and Windows (Windows Defender Firewall).
-Standard library only, Python 3.8 or newer. No install step.
+Works on macOS (pf), Linux (nftables) and Windows (Windows Defender Firewall),
+from a desktop app or the command line. The engine is standard-library Python,
+3.8 or newer, and there is no install step for it.
 
 ## How it works
 
-- `apply` installs a default-deny **outbound** rule set in the OS firewall. It
-  lives in its own pf anchor, nftables table or Windows Firewall group, so
-  `disable` removes only what this tool added.
+- Blocking installs a default-deny **outbound** rule set in the OS firewall. The
+  rules live in their own pf anchor, nftables table or Windows Firewall group, so
+  turning blocking off removes only what this tool added.
 - Always allowed: loopback, DNS (port 53), DHCP, ping, and private/LAN ranges
   (`allow_local_network`, on by default, costs no mobile data).
 - Allowed destinations are the IP addresses that the **enabled** groups in
-  `hotspot-guard.ini` resolve to. `watch` re-resolves them every
+  `hotspot-guard.ini` resolve to. A watcher re-resolves them every
   `refresh_seconds` and remembers recent addresses for `keep_addresses_hours`,
   so a flaky lookup does not cut live connections.
 - Inbound traffic is not affected.
 
-## Quick start
+## Desktop app
+
+`app/` is a Tauri app for Windows, macOS and Linux. Its interface is styled after
+macOS: a sidebar with a translucent material on macOS, grouped inset lists,
+switches, sheets and alerts, in light and dark appearance. It is a web
+imitation, not native AppKit controls, so it will not look identical to a
+System Settings pane.
+
+Sections:
+- **Blocking**: the main switch, the watcher state, and the Apply Changes or Clear Rules
+  actions when they apply.
+- **Allowed Groups**: the groups, with a switch for each.
+- **Activity**: the watcher log.
+- **Preview** (toolbar): the names resolved right now, with any name that has no
+  address called out.
+- **Edit Allowlist** (toolbar): opens the config in your text editor.
+
+Turning blocking on or off, and applying group changes while blocking is on,
+needs administrator rights. The app asks the OS for them each time:
+- macOS: the standard password dialog.
+- Linux: the polkit dialog (`pkexec`).
+- Windows: the UAC prompt.
+
+The app itself never runs with elevated rights. Reads, group toggles and the
+preview do not prompt.
+
+### Build
+
+You need Python 3.8 or newer, a stable Rust toolchain, and the Tauri prerequisites
+for your OS (see https://tauri.app/start/prerequisites/). On Linux that means the
+WebKitGTK 4.1 development packages. On Windows it means the MSVC build tools and
+WebView2, which Windows 10 and 11 already include.
+
+```sh
+cargo install tauri-cli --version "^2" --locked   # once
+cd tools/hotspot-guard/app/src-tauri
+cargo tauri build                                 # bundles for this OS in target/release/bundle
+```
+
+For development, run `cargo tauri dev` from `app/src-tauri`. The app then runs
+the engine straight from the source tree.
+
+The icons in `src-tauri/icons/` are placeholders from `app/make-icons.py`. To use real
+artwork, put a 1024 px PNG through `cargo tauri icon <file>`.
+
+### Where things live
+
+| | macOS | Linux | Windows |
+| --- | --- | --- | --- |
+| Allowlist (you edit this) | `~/Library/Application Support/local.hotspot-guard/hotspot-guard.ini` | `~/.local/share/local.hotspot-guard/hotspot-guard.ini` | `%APPDATA%\local.hotspot-guard\hotspot-guard.ini` |
+| Rules and state | `/var/db/hotspot-guard/` | `/var/lib/hotspot-guard/` | `%ProgramData%\hotspot-guard\` |
+| Watcher log | `/var/db/hotspot-guard/watch.log` | `/var/lib/hotspot-guard/watch.log` | `%ProgramData%\hotspot-guard\watch.log` |
+
+The app copies the default allowlist into the first location the first time it runs.
+
+### Status
+
+Built and run on Linux. The window was checked under a virtual display: the
+states, the preview sheet, the alerts and the watcher-failure path. The
+macOS and Windows builds have not been run yet, and neither has the elevation
+path on those systems. Try `cargo tauri build` on each, and report any
+problems you hit.
+
+## Command line
 
 Everything except `plan` changes or reads firewall state, so it needs
 administrator rights.
@@ -51,50 +115,19 @@ Stop refreshing with Ctrl-C. Blocking stays on until you run:
 sudo python3 hotspot_guard.py disable     # Windows: run from elevated PowerShell
 ```
 
-## Desktop app (macOS 26)
-
-`app/` holds a native SwiftUI app styled with Liquid Glass. It drives the same
-Python engine as the command line, so the rules and the tests are shared.
-
-Build it on a Mac with macOS 26 and Xcode 26 (or its command line tools):
-```sh
-cd tools/hotspot-guard/app
-./build-app.sh
-open "build/Hotspot Guard.app"
-```
-
-- Turn blocking on or off, switch allowlist groups, preview the resolved
-  addresses and watch the activity log.
-- Anything that changes the firewall runs as root through the standard macOS
-  password prompt. The app never keeps elevated rights. Group toggles and the
-  preview do not prompt.
-- While blocking is on, a group change waits for **Apply Changes**. Otherwise the
-  watcher picks it up at its next refresh.
-- The allowlist is `~/Library/Application Support/HotspotGuard/hotspot-guard.ini`.
-  **Edit Allowlist** opens it in your text editor.
-- The watcher runs as a background root process. Its log is
-  `/var/db/hotspot-guard/watch.log`. **Turn Off Blocking** stops the watcher and removes the rules.
-- If the watcher has died but the rules are still recorded as active (for example
-  after a crash), the app shows **Rules may still be active**. Use **Clear Rules**.
-
-The app is ad-hoc signed and not notarised, so it is for this Mac only. It uses
-`/usr/bin/python3`. The Swift code was written without Xcode available, so the
-first build may need small fixes. Compiler errors are the first thing to send back.
-
-## Commands
+### Commands
 
 | Command | What it does |
 | --- | --- |
-| `plan` | Resolves the allowlist and prints each name's addresses and any names with no address. No changes. |
+| `plan` | Resolves the allowlist and prints each name's addresses and any names with no address. No changes. `plan --json` gives the same as JSON. |
 | `apply` | Turns blocking on. `apply --dry-run` prints the firewall rules without installing them. |
 | `refresh` | Re-resolves names and updates the live rules once. Fails if blocking is off. |
-| `watch` | `apply`, then `refresh` every `refresh_seconds`. Reloads the config file each cycle. |
-| `disable` | Removes every hotspot-guard rule and restores normal networking. |
+| `watch` | `apply`, then `refresh` every `refresh_seconds`. Reloads the config file each cycle. Stops when `disable` writes its stop file, or on Ctrl-C. |
+| `disable` | Stops the watcher, then removes every hotspot-guard rule and restores normal networking. |
 | `status` | Shows whether blocking is on. With sudo it asks the firewall itself. `status --json` reads only what the tool recorded, so it needs no sudo. |
 | `groups` | Lists allowlist groups, whether each is on, and how many entries it has. `--json` for scripts. |
 | `set-group NAME on\|off` | Turns a group on or off in the config. Only that group's `enabled` line changes. Run `refresh` to apply it. |
 
-`plan --json` gives the resolved addresses as JSON. The desktop app uses these.
 Add `--config path/to/file.ini` to any command to use another allowlist.
 
 ## The allowlist (`hotspot-guard.ini`)
@@ -145,19 +178,13 @@ On Windows use `curl.exe`. Run `python3 hotspot_guard.py status` to confirm the 
 5. **QUIC (HTTP/3, UDP 443) is blocked.** Browsers and apps fall back to TCP.
 6. **Reboots.** macOS and Linux rules are not persistent, so a reboot turns
    blocking off. On Windows the rules persist and blocking stays on with the
-   addresses from the last run until `disable`.
-7. **Lockout.** If something you need is blocked, run `disable`. Keep a
-   terminal open with that command ready before your first `apply`. If
-   `watch` crashes, blocking stays on until you run `disable`.
-
-## Where state lives
-
-- macOS: `/var/db/hotspot-guard/`
-- Linux: `/var/lib/hotspot-guard/`
-- Windows: `%ProgramData%\hotspot-guard\`
-
-Each holds the last rules, the addresses seen, and a `state.json` that
-`disable` uses to restore the original Windows Firewall settings.
+   addresses from the last run until disabled. The app then shows **Rules may
+   still be active**, and **Clear Rules** removes them.
+7. **Lockout.** If something you need is blocked, turn blocking off. Keep the
+   app or a terminal ready to do that before your first time turning it on. If
+   the watcher crashes, blocking stays on until you turn it off.
+8. **Python is a dependency** of the app. Windows machines usually need it installed
+   from python.org. Bundling Python, or porting the engine to Rust, would remove that.
 
 ## Tests
 
@@ -166,17 +193,14 @@ cd tools/hotspot-guard
 python3 -m unittest -v
 ```
 
-The tests cover config parsing, address collapsing, address memory and rule
-rendering. On Linux they also run `nft -c`, which checks the nftables script
-without changing any rules.
-
-Status: the Linux path was run end to end in an isolated network namespace
-(apply, status, refresh, disable). The macOS (pf) and Windows paths have not yet
-been run on real hardware. Run `apply --dry-run` on those systems first and
-review the output.
+The tests cover config parsing, address collapsing, address memory, rule
+rendering, group editing, the JSON commands and the watcher's stale-PID handling.
+On Linux they also run `nft -c`, which checks the nftables script without
+changing any rules.
 
 ## Not included yet
 
 - Starting `watch` automatically at login. A launchd, systemd or Task Scheduler
   entry would do it.
 - A DNS-aware mode that allows by hostname (see limitation 1).
+- Code signing and notarisation for macOS and Windows, so the apps open without warnings.

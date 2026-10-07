@@ -1,0 +1,6 @@
+{
+  "identifier": "default",
+  "description": "Permissions for the main window. The app's own commands need no entry here.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

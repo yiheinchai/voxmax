@@ -1,0 +1,22 @@
+[package]
+name = "hotspot-guard-app"
+version = "0.2.0"
+description = "Hotspot Guard desktop app"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2" }
+serde_json = "1"
+
+# Transparent window and sidebar vibrancy need the private API. It is only switched on for macOS,
+# to match macOSPrivateApi in tauri.macos.conf.json.
+[target.'cfg(target_os = "macos")'.dependencies]
+tauri = { version = "2", features = ["macos-private-api"] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+strip = true

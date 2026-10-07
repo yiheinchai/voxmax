@@ -9,7 +9,7 @@ while `watch` runs. Standard library only, Python 3.8 or newer.
   plan       resolve the allowlist and print it (changes nothing)
   apply      turn blocking on (root or administrator)
   refresh    re-resolve the allowlist and update the live rules once
-  watch      apply, then refresh every refresh_seconds until Ctrl-C or disable
+  watch      apply, then refresh every refresh_seconds until stopped
   disable    stop the watcher and remove every hotspot-guard rule
   status     report whether blocking is on
   groups     list allowlist groups
@@ -43,6 +43,8 @@ STATE_DIR = {
 }.get(SYSTEM, Path.home() / ".hotspot-guard")
 STATE_FILE = STATE_DIR / "state.json"
 PID_FILE = STATE_DIR / "watch.pid"
+STOP_FILE = STATE_DIR / "watch.stop"  # `disable` writes this; the watch loop exits when it sees it
+LOG_FILE = STATE_DIR / "watch.log"
 
 LOOPBACK = ["127.0.0.0/8", "::1/128"]
 LOCAL_NETWORKS = [
@@ -180,33 +182,50 @@ def save_state(state):
     tmp.replace(STATE_FILE)
 
 
-def watcher_pid():
-    """PID of a running `watch` started by this tool, or None.
-
-    POSIX only: on Windows os.kill(pid, 0) terminates the process.
-    """
+def process_alive(pid):
+    """True if a process with this pid exists. Never signals it on Windows."""
     if SYSTEM == "Windows":
-        return None
+        listing = subprocess.run(["tasklist", "/FI", f"PID eq {pid}", "/NH"],
+                                 capture_output=True, text=True).stdout
+        return str(pid) in listing.split()
+    try:
+        os.kill(pid, 0)  # signal 0 only checks that the process exists
+    except PermissionError:
+        return True  # alive but owned by root, the normal case for an unprivileged status check
+    except OSError:
+        return False
+    return True
+
+
+def watcher_pid():
+    """PID of a running `watch` started by this tool, or None."""
     try:
         pid = int(PID_FILE.read_text())
-        os.kill(pid, 0)
-    except PermissionError:
-        pass  # alive but owned by root, which is the normal case for an unprivileged status check
     except (OSError, ValueError):
         return None
+    if not process_alive(pid):
+        return None
+    if SYSTEM == "Windows":
+        return pid
     # Guard against PID reuse: only trust the pid if it is still our watch command.
     command = subprocess.run(["ps", "-o", "command=", "-p", str(pid)], capture_output=True, text=True).stdout
     return pid if "hotspot_guard" in command and " watch" in command else None
 
 
 def stop_watcher():
+    """Ask a running watcher to exit and wait for it. Returns True if one was running."""
     pid = watcher_pid()
     if pid is None:
+        PID_FILE.unlink(missing_ok=True)
         return False
-    os.kill(pid, signal.SIGTERM)
-    deadline = time.time() + 5
+    STOP_FILE.write_text("stop")  # polled once a second by the watch loop, on every OS
+    deadline = time.time() + 15
     while watcher_pid() is not None and time.time() < deadline:
-        time.sleep(0.2)
+        time.sleep(0.5)
+    if watcher_pid() is not None and SYSTEM != "Windows":
+        os.kill(pid, signal.SIGTERM)  # last resort for a stuck watcher
+        time.sleep(1)
+    STOP_FILE.unlink(missing_ok=True)
     return True
 
 
@@ -280,7 +299,7 @@ def refresh(config_path):
 
 
 def _interrupt(*_):
-    raise KeyboardInterrupt  # lets SIGTERM from `disable` take the same clean exit as Ctrl-C
+    raise KeyboardInterrupt  # lets SIGTERM take the same clean exit as Ctrl-C
 
 
 def watch(config_path):
@@ -288,22 +307,29 @@ def watch(config_path):
     if existing is not None and existing != os.getpid():
         sys.exit(f"already watching (pid {existing}); run disable first")
     STATE_DIR.mkdir(parents=True, exist_ok=True)
+    STOP_FILE.unlink(missing_ok=True)  # a stop left over from an earlier run must not end this one
     PID_FILE.write_text(str(os.getpid()))
     signal.signal(signal.SIGTERM, _interrupt)
     try:
         install(config_path)
         interval = load_config(config_path)[0]["refresh_seconds"]
-        print(f"refreshing every {interval}s. Ctrl-C or `disable` stops refreshing; blocking stays on until disabled")
-        while True:
-            time.sleep(interval)
+        print(f"refreshing every {interval}s. `disable` stops refreshing; blocking stays on until disabled")
+        due = time.time() + interval
+        while not STOP_FILE.exists():
+            time.sleep(1)
+            if time.time() < due:
+                continue
+            due = time.time() + interval
             try:
                 refresh(config_path)
             except (Exception, SystemExit) as exc:  # keep going through a bad lookup or a config typo
                 print(f"refresh failed, will retry: {exc}")
-    except KeyboardInterrupt:  # Ctrl-C, or SIGTERM from `disable`; rules are only removed by disable itself
+        print("watch stopped")
+    except KeyboardInterrupt:  # Ctrl-C or SIGTERM; rules are only removed by disable itself
         print("\nwatch stopped")
     finally:
         PID_FILE.unlink(missing_ok=True)
+        STOP_FILE.unlink(missing_ok=True)
 
 
 def disable():
@@ -330,6 +356,7 @@ def status(as_json=False):
             "applied_at": state.get("applied_at"),
             "remembered": len(state.get("seen", {})),
             "backend": backend.name,
+            "log_file": str(LOG_FILE),
         }))
         return
     on = backend.is_active(state)

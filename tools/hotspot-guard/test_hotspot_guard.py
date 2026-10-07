@@ -239,6 +239,17 @@ class CliJsonTests(unittest.TestCase):
         self.assertTrue(data["active"])
         self.assertFalse(data["watching"])
         self.assertEqual(data["remembered"], 1)
+        self.assertTrue(data["log_file"].endswith("watch.log"))
+
+
+class StopWatcherTests(unittest.TestCase):
+    def test_stale_pid_file_is_cleared(self):
+        pid_file = temp_file("999999999", name="watch.pid")  # no such process
+        stop_file = pid_file.with_name("watch.stop")
+        with mock.patch.multiple(hg, PID_FILE=pid_file, STOP_FILE=stop_file, SYSTEM="Linux"):
+            self.assertFalse(hg.stop_watcher())
+        self.assertFalse(pid_file.exists())
+        self.assertFalse(stop_file.exists())
 
 
 if __name__ == "__main__":
