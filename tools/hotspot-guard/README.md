@@ -187,20 +187,28 @@ On Windows use `curl.exe`. Run `python3 hotspot_guard.py status` to confirm the 
 7. **Lockout.** If something you need is blocked, turn blocking off. Keep the
    app or a terminal ready to do that before your first time turning it on. If
    the watcher crashes, blocking stays on until you turn it off.
-8. **Python is a dependency** of the app. Windows machines usually need it installed
+8. **IPv6-only networks.** On a NAT64 network the engine finds the translation
+   prefix automatically (RFC 7050) and allows IPv4 destinations under it. Some
+   carriers do not answer that check, so the prefix may show as `Not used` when it is
+   needed. Set `nat64_prefix` to the carrier's `/96` in the allowlist if so.
+   [ON-DEVICE-TEST.md](ON-DEVICE-TEST.md) step 1 shows how to tell.
+9. **Python is a dependency** of the app. Windows machines usually need it installed
    from python.org. Bundling Python, or porting the engine to Rust, would remove that.
 
 ## Tests
 
-```sh
-cd tools/hotspot-guard
-python3 -m unittest -v
-```
+`./test-all.sh` runs every tier and says why any tier it cannot run here was skipped.
+Run it with `sudo` to include the tiers that need root.
 
-The tests cover config parsing, address collapsing, address memory, rule
-rendering, group editing, the JSON commands and the watcher's stale-PID handling.
-On Linux they also run `nft -c`, which checks the nftables script without
-changing any rules.
+| Tier | What it proves | Needs |
+| --- | --- | --- |
+| Engine unit tests (`python3 -m unittest`) | Config parsing, address handling, NAT64 and DHCPv6 rules, rendering, group editing, JSON output, the watcher's stale-PID handling | Python 3.8+ |
+| Namespace firewall tests (`sudo python3 -m unittest discover -s e2e -v`) | Real packets through nftables between a client and a simulated hotspot: drop and allow for IPv4, the local network, refresh, watch and disable, and that rules are removed. IPv6 and NAT64 cases skip on kernels without IPv6. | root, `ip`, `nft` |
+| Browser interface tests (`cd app/e2e && npm install && npx playwright test`) | 39 flows in Chromium, covering every control, dialog, failure path and keyboard path, against a stateful stand-in for the app's bridge | Node 18+, Chromium |
+| Real-app tests (`cd app/e2e-app && npm install && sudo ./run-tests.sh`) | The built app, driven through tauri-driver, checking the allowlist file, the firewall table and the watcher log. Runs in its own network namespace. | root, a debug build, `tauri-driver`, `WebKitWebDriver`, polkit, an X display |
+
+What no test can prove is how your network and carrier behave. For that, follow
+[ON-DEVICE-TEST.md](ON-DEVICE-TEST.md) on the actual VOXI hotspot, and send back its results.
 
 ## Not included yet
 
