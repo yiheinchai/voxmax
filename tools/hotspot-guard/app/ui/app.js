@@ -5,6 +5,7 @@ const PANE_TITLES = {
   blocking: "Blocking",
   allowed: "Allowed Groups",
   activity: "Activity",
+  usage: "Data Usage",
 };
 
 const state = {
@@ -15,6 +16,7 @@ const state = {
   busyMessage: "",     // shown under the switch while busy
   loaded: false,       // true once the first read has succeeded
   switchTarget: null,  // the position the user asked for while an action runs
+  usage: { view: "all", hours: 24, data: null, error: null },  // the Data Usage pane
   pane: "blocking",
 };
 
@@ -171,7 +173,151 @@ async function refresh() {
   }
   render();
   if (state.pane === "activity") await refreshLog();
+  if (state.pane === "usage") await refreshUsage();
 }
+
+// ---- Data usage -------------------------------------------------------------------------------
+
+/** 1000-based units, the way network traffic is usually quoted. */
+function formatBytes(bytes) {
+  if (bytes === null || bytes === undefined) return "—";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1000 && unit < units.length - 1) {
+    value /= 1000;
+    unit += 1;
+  }
+  const shown = unit === 0 || value >= 100 ? Math.round(value) : value.toFixed(1);
+  return `${shown} ${units[unit]}`;
+}
+
+async function refreshUsage() {
+  const usage = state.usage;
+  const bucket = usage.hours <= 24 ? 3600 : 86400;
+  try {
+    usage.data = await invoke("engine_usage", { hours: usage.hours, bucket });
+    usage.error = null;
+  } catch (error) {
+    usage.error = errorText(error);
+  }
+  renderUsage();
+}
+
+function renderUsage() {
+  const usage = state.usage;
+  document.querySelectorAll(".segment[data-view]").forEach((button) => {
+    const selected = button.dataset.view === usage.view;
+    button.classList.toggle("is-selected", selected);
+    button.setAttribute("aria-checked", String(selected));
+  });
+  document.querySelectorAll(".segment[data-hours]").forEach((button) => {
+    const selected = Number(button.dataset.hours) === usage.hours;
+    button.classList.toggle("is-selected", selected);
+    button.setAttribute("aria-checked", String(selected));
+  });
+
+  const note = $("usage-note");
+  if (usage.error) {
+    $("usage-headline").textContent = "—";
+    note.textContent = `Usage could not be read: ${usage.error}`;
+    renderChart([], usage.view);
+    return;
+  }
+  const data = usage.data;
+  if (!data) {
+    note.textContent = "Loading…";
+    return;
+  }
+
+  const totals = data.totals;
+  const split = totals.social !== null;
+  const periodText = usage.hours === 24 ? "in the last 24 hours" : "in the last 7 days";
+  const socialShare = split && totals.social + totals.other > 0
+    ? Math.round((100 * totals.social) / (totals.social + totals.other))
+    : null;
+
+  $("usage-headline-label").textContent = usage.view === "all" ? "All traffic" : "Excluding social media";
+  $("usage-headline").textContent = formatBytes(usage.view === "all" ? totals.all : totals.other);
+  $("usage-headline-sub").textContent = split || usage.view === "all"
+    ? `${periodText}`
+    : "Not available on this system";
+
+  $("usage-social").textContent = formatBytes(totals.social);
+  $("usage-social-sub").textContent = socialShare === null ? "Not available on this system" : `${socialShare}% of measured traffic`;
+  $("usage-other").textContent = formatBytes(totals.other);
+  $("usage-other-sub").textContent = socialShare === null ? "Not available on this system" : `${100 - socialShare}% of measured traffic`;
+
+  const notes = [];
+  if (data.samples === 0) {
+    notes.push("No usage recorded yet. Usage is recorded every minute while blocking is on.");
+  } else if (!split) {
+    notes.push("Splitting out social media needs per-connection counters, which this system does not provide. Only the totals are shown.");
+  } else if (totals.split_coverage !== null && totals.split_coverage < 0.999) {
+    notes.push(`The split covers ${Math.round(totals.split_coverage * 100)}% of the measured traffic. The rest had no per-connection counters.`);
+  }
+  if (!data.tracking) {
+    notes.push("Blocking is off, so nothing is being recorded now.");
+  }
+  note.textContent = notes.join(" ");
+  renderChart(data.buckets, usage.view);
+}
+
+function renderChart(buckets, view) {
+  const svg = $("usage-chart");
+  const width = 600;
+  const height = 190;
+  if (!buckets.length) {
+    svg.innerHTML = "";
+    svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+    $("axis-start").textContent = "";
+    $("axis-end").textContent = "";
+    return;
+  }
+  const value = (bucket) => (view === "all" ? bucket.total : bucket.other);
+  const max = Math.max(1, ...buckets.map(value));
+  const slot = width / buckets.length;
+  const barWidth = Math.max(2, slot * 0.7);
+  let markup = "";
+  buckets.forEach((bucket, index) => {
+    const x = (index * slot + (slot - barWidth) / 2).toFixed(1);
+    let top = height;
+    const segment = (amount, className) => {
+      if (!amount) return;
+      const h = (amount / max) * (height - 4);
+      top -= h;
+      markup += `<rect x="${x}" y="${top.toFixed(1)}" width="${barWidth.toFixed(1)}" height="${h.toFixed(1)}" class="${className}"/>`;
+    };
+    if (view === "all") {
+      segment(bucket.other, "bar-other");
+      segment(bucket.social, "bar-social");
+      segment(bucket.total - bucket.split, "bar-unsplit");
+    } else {
+      segment(bucket.other, "bar-other");
+    }
+  });
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.innerHTML = markup;
+  const label = (start) => new Date(start * 1000).toLocaleString([], {
+    month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+  });
+  $("axis-start").textContent = label(buckets[0].start);
+  $("axis-end").textContent = label(buckets[buckets.length - 1].start);
+}
+
+document.querySelector("#pane-usage").addEventListener("click", (event) => {
+  const viewButton = event.target.closest(".segment[data-view]");
+  const hoursButton = event.target.closest(".segment[data-hours]");
+  if (viewButton) {
+    state.usage.view = viewButton.dataset.view;
+    renderUsage();
+  } else if (hoursButton) {
+    state.usage.hours = Number(hoursButton.dataset.hours);
+    state.usage.data = null;
+    renderUsage();
+    refreshUsage();
+  }
+});
 
 async function refreshLog() {
   const pre = $("log");
@@ -311,6 +457,7 @@ function selectPane(pane) {
   });
   $("pane-title").textContent = PANE_TITLES[pane];
   if (pane === "activity") refreshLog();
+  if (pane === "usage") refreshUsage();
 }
 
 document.querySelector(".sidebar-list").addEventListener("click", (event) => {

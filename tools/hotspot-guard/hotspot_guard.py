@@ -32,11 +32,13 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import firewall
+import usage
 
 SYSTEM = platform.system()
 HERE = Path(__file__).resolve().parent
 DEFAULT_CONFIG = HERE / "hotspot-guard.ini"
-STATE_DIR = {
+# HOTSPOT_GUARD_STATE_DIR moves the state folder, which the tests use so they never touch real history.
+STATE_DIR = Path(os.environ["HOTSPOT_GUARD_STATE_DIR"]) if os.environ.get("HOTSPOT_GUARD_STATE_DIR") else {
     "Darwin": Path("/var/db/hotspot-guard"),
     "Linux": Path("/var/lib/hotspot-guard"),
     "Windows": Path(os.environ.get("ProgramData", r"C:\ProgramData")) / "hotspot-guard",
@@ -74,15 +76,32 @@ def load_config(path):
     for section in parser.sections():
         if section == "settings" or not parser.getboolean(section, "enabled", fallback=False):
             continue
-        for entry in parser.get(section, "domains", fallback="").split():
-            entry = entry.lower().rstrip(".")
-            try:
-                networks.add(str(ipaddress.ip_network(entry, strict=False)))
-            except ValueError:
-                if not HOSTNAME_RE.match(entry):
-                    sys.exit(f"[{section}] not a domain, IP address or CIDR range: {entry}")
-                names.add(entry)
+        section_networks, section_names = parse_entries(section, parser.get(section, "domains", fallback=""))
+        networks |= section_networks
+        names |= section_names
     return settings, networks, names
+
+
+def parse_entries(section, text):
+    """(networks, names) for the entries of one group: IP addresses and CIDR ranges, or domain names."""
+    networks, names = set(), set()
+    for entry in text.split():
+        entry = entry.lower().rstrip(".")
+        try:
+            networks.add(str(ipaddress.ip_network(entry, strict=False)))
+        except ValueError:
+            if not HOSTNAME_RE.match(entry):
+                sys.exit(f"[{section}] not a domain, IP address or CIDR range: {entry}")
+            names.add(entry)
+    return networks, names
+
+
+def social_members(path, group="social"):
+    """(networks, names) of the social group, or empty sets when it is off. Used to split usage."""
+    parser = read_parser(path)
+    if not parser.has_section(group) or not parser.getboolean(group, "enabled", fallback=False):
+        return set(), set()
+    return parse_entries(group, parser.get(group, "domains", fallback=""))
 
 
 def list_groups(path):
@@ -143,10 +162,14 @@ def resolve(names):
 
 def remember(state, fresh, keep_hours):
     """Union of this lookup and recently seen addresses, so a failed lookup does not drop live connections."""
+    return remember_field(state, "seen", fresh, keep_hours)
+
+
+def remember_field(state, field, fresh, keep_hours):
     now = time.time()
-    seen = {ip: seen_at for ip, seen_at in state.get("seen", {}).items() if now - seen_at < keep_hours * 3600}
+    seen = {ip: seen_at for ip, seen_at in state.get(field, {}).items() if now - seen_at < keep_hours * 3600}
     seen.update(dict.fromkeys(fresh, now))
-    state["seen"] = seen
+    state[field] = seen
     return list(seen)
 
 
@@ -215,6 +238,13 @@ def current_networks(config_path, state):
     settings, networks, names = load_config(config_path)
     fresh, failed = resolve(names)
     addresses = remember(state, fresh, settings["keep_addresses_hours"])
+    social_networks, social_names = social_members(config_path)
+    social_ips = [ip for ip, host in fresh.items() if host in social_names]
+    social_addresses = remember_field(state, "social_seen", social_ips, settings["keep_addresses_hours"])
+    if not social_networks and not social_names:
+        state["social_seen"] = {}
+    state["social_networks"] = sorted(social_networks | {
+        str(ipaddress.ip_network(ip, strict=False)) for ip in social_addresses})
     prefix = nat64_prefix_for(settings["nat64_prefix"])
     state["nat64_prefix"] = str(prefix) if prefix else None
     extra = synthesize_nat64(list(networks) + addresses, prefix) if prefix else []
@@ -334,6 +364,7 @@ def install(config_path, dry_run=False):
     backend.apply(networks, state)
     state.update(backend=backend.name, active=True, applied_at=time.time())
     save_state(state)
+    (STATE_DIR / usage.BASELINE).unlink(missing_ok=True)
     report(failed)
     print(f"blocking on via {backend.name}: {len(networks)} networks allowed")
 
@@ -349,6 +380,36 @@ def refresh(config_path):
     save_state(state)
     report(failed)
     print(f"{time.strftime('%H:%M:%S')} refreshed: {len(networks)} networks allowed")
+
+
+USAGE_EVERY = 60  # seconds between usage samples while the watcher runs
+
+
+def record_usage():
+    state = load_state()
+    try:
+        usage.take_sample(STATE_DIR, state.get("social_networks", []), state.get("nat64_prefix"))
+    except Exception as exc:  # usage tracking must never stop the watcher
+        print(f"usage sample failed: {exc}")
+
+
+def usage_report(hours, bucket, sample, as_json):
+    if sample:
+        require_admin()
+        record_usage()
+        return
+    summary = usage.summarize(STATE_DIR, hours=hours, bucket_seconds=bucket)
+    summary["tracking"] = watcher_pid() is not None
+    if as_json:
+        print(json.dumps(summary))
+        return
+    totals = summary["totals"]
+    print(f"{summary['samples']} samples in the last {hours} hours; tracking {'on' if summary['tracking'] else 'off'}")
+    print(f"all traffic: {totals['all']} bytes")
+    if totals["social"] is not None:
+        print(f"social media: {totals['social']} bytes; excluding social media: {totals['other']} bytes")
+    else:
+        print("social media split: not available on this system")
 
 
 def _interrupt(*_):
@@ -368,8 +429,12 @@ def watch(config_path):
         interval = load_config(config_path)[0]["refresh_seconds"]
         print(f"refreshing every {interval}s. `disable` stops refreshing; blocking stays on until disabled")
         due = time.time() + interval
+        next_usage = time.time()
         while not STOP_FILE.exists():
             time.sleep(1)
+            if time.time() >= next_usage:
+                record_usage()
+                next_usage = time.time() + USAGE_EVERY
             if time.time() < due:
                 continue
             due = time.time() + interval
@@ -393,6 +458,7 @@ def disable():
     state = load_state()
     firewall.get_backend(STATE_DIR).disable(state)
     STATE_FILE.unlink(missing_ok=True)
+    (STATE_DIR / usage.BASELINE).unlink(missing_ok=True)
     print("blocking off; normal networking restored")
 
 
@@ -438,6 +504,11 @@ def main(argv=None):
     status_cmd.add_argument("--json", action="store_true", help="unprivileged, machine-readable output")
     groups_cmd = commands.add_parser("groups", help="list allowlist groups")
     groups_cmd.add_argument("--json", action="store_true", help="machine-readable output")
+    usage_cmd = commands.add_parser("usage", help="data used over time, with and without social media")
+    usage_cmd.add_argument("--hours", type=int, default=24, help="how far back to report")
+    usage_cmd.add_argument("--bucket", type=int, default=3600, help="seconds per bucket")
+    usage_cmd.add_argument("--sample", action="store_true", help="record a sample now (needs root)")
+    usage_cmd.add_argument("--json", action="store_true", help="machine-readable output")
     set_cmd = commands.add_parser("set-group", help="turn an allowlist group on or off in the config")
     set_cmd.add_argument("name")
     set_cmd.add_argument("state", choices=["on", "off"])
@@ -457,6 +528,8 @@ def main(argv=None):
         status(as_json=args.json)
     elif args.command == "groups":
         groups(args.config, as_json=args.json)
+    elif args.command == "usage":
+        usage_report(args.hours, args.bucket, args.sample, args.json)
     else:
         set_group(args.config, args.name, args.state == "on")
         print(f"[{args.name}] {'enabled' if args.state == 'on' else 'disabled'}; run refresh to apply it")

@@ -34,6 +34,10 @@ Sections:
   actions when they apply.
 - **Allowed Groups**: the groups, with a switch for each.
 - **Activity**: the watcher log.
+- **Data Usage**: how much data the Mac used over the last 24 hours or 7 days, as a chart
+  and three totals: all traffic, social media, and everything else. The
+  **All traffic** and **Excluding social media** switch changes the chart and the
+  headline number. Usage is recorded every minute while blocking is on.
 - **Preview** (toolbar): the names resolved right now, with any name that has no
   address called out.
 - **Edit Allowlist** (toolbar): opens the config in your text editor.
@@ -130,6 +134,7 @@ sudo python3 hotspot_guard.py disable     # Windows: run from elevated PowerShel
 | `disable` | Stops the watcher, then removes every hotspot-guard rule and restores normal networking. |
 | `status` | Shows whether blocking is on. With sudo it asks the firewall itself. `status --json` reads only what the tool recorded, so it needs no sudo. |
 | `groups` | Lists allowlist groups, whether each is on, and how many entries it has. `--json` for scripts. |
+| `usage` | Data used over time, split into social media and everything else where the system allows it. `usage --json --hours 168 --bucket 86400` for a 7-day view. `usage --sample` records a sample now (needs sudo). |
 | `set-group NAME on\|off` | Turns a group on or off in the config. Only that group's `enabled` line changes. Run `refresh` to apply it. |
 
 Add `--config path/to/file.ini` to any command to use another allowlist.
@@ -187,12 +192,19 @@ On Windows use `curl.exe`. Run `python3 hotspot_guard.py status` to confirm the 
 7. **Lockout.** If something you need is blocked, turn blocking off. Keep the
    app or a terminal ready to do that before your first time turning it on. If
    the watcher crashes, blocking stays on until you turn it off.
-8. **IPv6-only networks.** On a NAT64 network the engine finds the translation
+8. **Data usage is measured on the Mac.** The totals come from the network
+   interface's byte counters, so they should match what the hotspot carried for this
+   Mac, but the carrier's own meter is the figure to trust for billing. Splitting out
+   social media works from per-connection counters: Linux (conntrack accounting, tested
+   in the namespace suite) and macOS (the pf state table, not yet checked on a Mac).
+   On Windows the page shows totals only. Usage is only recorded while blocking is on.
+   Samples older than 30 days are dropped.
+9. **IPv6-only networks.** On a NAT64 network the engine finds the translation
    prefix automatically (RFC 7050) and allows IPv4 destinations under it. Some
    carriers do not answer that check, so the prefix may show as `Not used` when it is
    needed. Set `nat64_prefix` to the carrier's `/96` in the allowlist if so.
    [ON-DEVICE-TEST.md](ON-DEVICE-TEST.md) step 1 shows how to tell.
-9. **Python is a dependency** of the app. Windows machines usually need it installed
+10. **Python is a dependency** of the app. Windows machines usually need it installed
    from python.org. Bundling Python, or porting the engine to Rust, would remove that.
 
 ## Tests

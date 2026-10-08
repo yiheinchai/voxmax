@@ -38,7 +38,8 @@
     "resources": {
       "../../hotspot_guard.py": "engine/hotspot_guard.py",
       "../../firewall.py": "engine/firewall.py",
-      "../../hotspot-guard.ini": "engine/hotspot-guard.ini"
+      "../../hotspot-guard.ini": "engine/hotspot-guard.ini",
+      "../../usage.py": "engine/usage.py"
     }
   }
 }

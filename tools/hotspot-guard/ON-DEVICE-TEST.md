@@ -73,6 +73,15 @@ group off and on again, or run `plan`, and look for the hostnames involved.
 - Expected: most of the background traffic on the Mac is gone, and social-app traffic
   is the only meaningful use. VOXI decides whether that social traffic is free.
 
+## 5a. Check the Data Usage page
+
+- Open **Data Usage** in the app, with blocking on for at least 10 minutes.
+- Compare its "All traffic" total with the iPhone's usage change from step 0.
+  The two should be close. A large gap means the Mac is not the only device on the
+  hotspot, or the carrier counts differently.
+- Note the social-media share, and whether the "Excluding social media" view looks right.
+  Record "not available" if the page says the split is unavailable.
+
 ## 6. Turn blocking off and confirm normal networking
 
 - Turn blocking off in the app (or `sudo python3 hotspot_guard.py disable`).
@@ -94,6 +103,8 @@ group off and on again, or run `plan`, and look for the hostnames involved.
 | TikTok | | |
 | Reddit | | |
 | Data meter change (step 5) | | MB before / after |
+| Data Usage page vs iPhone meter (5a) | | All traffic MB / iPhone MB |
+| Social-media share on the usage page | | % (or "not available") |
 | Normal networking after disable | | |
 
 If any step fails, send back: the table above, the output of `python3 hotspot_guard.py

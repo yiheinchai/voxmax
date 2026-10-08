@@ -132,6 +132,21 @@ test("Allowed Groups lists the real allowlist groups", async () => {
   assert.deepEqual(names, ["Social", "Claude", "Dev", "Custom"]);
 });
 
+test("Data Usage reads the real engine and renders the page", async () => {
+  await pane("usage");
+  await waitForVisible("pane-usage");
+  await driver.wait(async () => (await read("usage-headline-sub")) !== "Loading…", 30_000,
+    "the usage page never finished loading");
+  const note = (await read("usage-note")).trim();
+  assert.ok(!note.startsWith("Usage could not be read"), `the engine failed to report usage: ${note}`);
+  assert.equal((await read("usage-headline-label")).trim(), "All traffic");
+  await driver.findElement(By.css('.segment[data-view="excluding"]')).click();
+  await driver.wait(async () => (await read("usage-headline-label")).trim() === "Excluding social media", 10_000,
+    "the excluding view never showed");
+  await driver.findElement(By.css('.segment[data-view="all"]')).click();
+  await pane("allowed");
+});
+
 test("turning a group on is saved to the allowlist file, and off again", async () => {
   assert.equal(groupEnabled("dev"), false);
   await setGroup("dev", true);

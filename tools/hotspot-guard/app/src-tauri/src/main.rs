@@ -396,6 +396,15 @@ async fn read_log(app: AppHandle, lines: usize) -> Result<Vec<String>, String> {
     Ok(all[all.len().saturating_sub(lines)..].to_vec())
 }
 
+/// Data used over time: all traffic, and the split between social media and everything else.
+#[tauri::command]
+async fn engine_usage(app: AppHandle, hours: u32, bucket: u32) -> Result<Value, String> {
+    let engine = Engine::load(&app)?;
+    let hours = hours.to_string();
+    let bucket = bucket.to_string();
+    parse_json(&run_engine(&engine, &["usage", "--json", "--hours", hours.as_str(), "--bucket", bucket.as_str()])?)
+}
+
 /// Opens the allowlist in the user's text editor.
 #[tauri::command]
 async fn open_allowlist(app: AppHandle) -> Result<(), String> {
@@ -422,6 +431,7 @@ fn main() {
             stop_blocking,
             apply_changes,
             read_log,
+            engine_usage,
             open_allowlist,
         ])
         .run(tauri::generate_context!())

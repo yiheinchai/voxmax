@@ -24,6 +24,10 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>
           <span>Activity</span>
         </button>
+        <button class="sidebar-item" data-pane="usage">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V11M10 20V5M16 20v-7M22 20H2"/></svg>
+          <span>Data Usage</span>
+        </button>
       </nav>
       <div class="sidebar-footer" aria-live="polite">
         <span class="status-dot" id="sidebar-dot" aria-hidden="true"></span>
@@ -117,6 +121,44 @@
           <div class="grouped log">
             <pre id="log">No activity yet.</pre>
           </div>
+        </section>
+
+        <section class="pane pane-wide" id="pane-usage" hidden>
+          <div class="usage-controls">
+            <div class="segmented" role="radiogroup" aria-label="Show usage">
+              <button class="segment is-selected" role="radio" aria-checked="true" data-view="all">All traffic</button>
+              <button class="segment" role="radio" aria-checked="false" data-view="excluding">Excluding social media</button>
+            </div>
+            <div class="segmented" role="radiogroup" aria-label="Period">
+              <button class="segment is-selected" role="radio" aria-checked="true" data-hours="24">24 hours</button>
+              <button class="segment" role="radio" aria-checked="false" data-hours="168">7 days</button>
+            </div>
+          </div>
+
+          <div class="usage-cards">
+            <div class="card card-headline">
+              <div class="card-label" id="usage-headline-label">All traffic</div>
+              <div class="card-value" id="usage-headline">—</div>
+              <div class="card-sub" id="usage-headline-sub">Loading…</div>
+            </div>
+            <div class="card">
+              <div class="card-label"><span class="swatch swatch-social" aria-hidden="true"></span>Social media</div>
+              <div class="card-value" id="usage-social">—</div>
+              <div class="card-sub" id="usage-social-sub"></div>
+            </div>
+            <div class="card">
+              <div class="card-label"><span class="swatch swatch-other" aria-hidden="true"></span>Everything else</div>
+              <div class="card-value" id="usage-other">—</div>
+              <div class="card-sub" id="usage-other-sub"></div>
+            </div>
+          </div>
+
+          <div class="group-label">Data used over time</div>
+          <div class="grouped chart-box">
+            <svg id="usage-chart" class="usage-chart" role="img" aria-label="Data used over time"></svg>
+            <div class="chart-axis"><span id="axis-start"></span><span id="axis-end"></span></div>
+          </div>
+          <p class="muted footnote" id="usage-note"></p>
         </section>
       </div>
     </main>

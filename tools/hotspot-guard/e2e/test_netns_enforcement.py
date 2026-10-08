@@ -12,6 +12,7 @@ allowed. A probe that times out means the firewall dropped them.
 Run from tools/hotspot-guard:  sudo python3 -m unittest discover -s e2e -v
 """
 
+import json
 import os
 import shutil
 import subprocess
@@ -24,11 +25,15 @@ HERE = Path(__file__).resolve().parents[1]
 ENGINE = HERE / "hotspot_guard.py"
 SERVE = Path(__file__).resolve().parent / "serve.py"
 PROBE = Path(__file__).resolve().parent / "probe.py"
+DOWNLOAD = Path(__file__).resolve().parent / "download.py"
+BULK_PORT = 8081
+BULK_BYTES = 1_000_000
 CLIENT, HOTSPOT = "hg-client", "hg-hotspot"
 PORT = 8080
 
 # Test addresses. 203.0.113.0/24 and 2001:db8::/32 are documentation ranges, so nothing real is touched.
 ALLOWED_V4, BLOCKED_V4 = "203.0.113.10", "203.0.113.20"
+OTHER_V4 = "203.0.113.30"  # an ordinary site, allowed in the usage test to compare with the social one
 ALLOWED_V6, BLOCKED_V6 = "2001:db8:77::10", "2001:db8:77::20"
 NAT64_PREFIX = "64:ff9b::/96"
 ALLOWED_NAT64 = "64:ff9b::cb00:710a"   # 203.0.113.10 under the NAT64 prefix
@@ -76,6 +81,7 @@ class FirewallEndToEnd(unittest.TestCase):
     def setUpClass(cls):
         cls.workdir = Path(tempfile.mkdtemp(prefix="hg-e2e-"))
         cls.config = cls.workdir / "hotspot-guard.ini"
+        os.environ["HOTSPOT_GUARD_STATE_DIR"] = str(cls.workdir / "state")  # keep real state out of the tests
         cls.server = None
         cls.built = False
         try:
@@ -83,6 +89,9 @@ class FirewallEndToEnd(unittest.TestCase):
             cls._write_config(allowed=[ALLOWED_V4, ALLOWED_V6])
             cls.server = subprocess.Popen(
                 ["ip", "netns", "exec", HOTSPOT, "python3", "-B", str(SERVE), str(PORT)],
+                stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+            cls.bulk = subprocess.Popen(
+                ["ip", "netns", "exec", HOTSPOT, "python3", "-B", str(SERVE), str(BULK_PORT), str(BULK_BYTES)],
                 stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
             cls._wait_for_listener()
         except Exception:
@@ -93,11 +102,13 @@ class FirewallEndToEnd(unittest.TestCase):
     def tearDownClass(cls):
         if cls.built:
             engine(cls.config, "disable", check=False)
-        if cls.server is not None:
-            cls.server.kill()
-            cls.server.wait()
+        for listener in (getattr(cls, "server", None), getattr(cls, "bulk", None)):
+            if listener is not None:
+                listener.kill()
+                listener.wait()
         for ns in (CLIENT, HOTSPOT):
             run("ip", "netns", "del", ns, check=False)
+        os.environ.pop("HOTSPOT_GUARD_STATE_DIR", None)
         shutil.rmtree(cls.workdir, ignore_errors=True)
 
     @classmethod
@@ -114,7 +125,8 @@ class FirewallEndToEnd(unittest.TestCase):
             run("ip", "-n", ns, "link", "set", "lo", "up")
             run("ip", "-n", ns, "link", "set", "hgc" if ns == CLIENT else "hgh", "up")
         run("ip", "-n", CLIENT, "route", "add", "203.0.113.0/24", "via", LOCAL_PEER)
-        for address in (ALLOWED_V4, BLOCKED_V4):
+        run("ip", "-n", CLIENT, "route", "add", "default", "via", LOCAL_PEER)  # the hotspot is the default route
+        for address in (ALLOWED_V4, BLOCKED_V4, OTHER_V4):
             run("ip", "-n", HOTSPOT, "addr", "add", address + "/32", "dev", "lo")
         # IPv6 is optional: some kernels (and sandboxes) have none, and the tests skip those cases.
         cls.ipv6 = run("ip", "-n", CLIENT, "-6", "addr", "add", "fd77::2/64", "dev", "hgc", "nodad",
@@ -223,6 +235,32 @@ class FirewallEndToEnd(unittest.TestCase):
             self.assertTrue(reachable(BLOCKED_NAT64), "NAT64 must be reachable again after disable")
         tables = in_client("nft", "list", "tables").stdout
         self.assertNotIn("hotspot_guard", tables, "no hotspot-guard table may be left behind")
+
+    def test_09_usage_splits_social_traffic_from_the_rest(self):
+        # A 1 MB download from a social address and one from an ordinary address, both allowed.
+        config = self.workdir / "usage.ini"
+        config.write_text(
+            "[settings]\nallow_local_network = yes\n"
+            "[social]\nenabled = yes\ndomains =\n    " + ALLOWED_V4 + "\n"
+            "[custom]\nenabled = yes\ndomains =\n    " + OTHER_V4 + "\n")
+        engine(config, "apply")
+        try:
+            engine(config, "usage", "--sample")  # the baseline: the first sample only records the counters
+            social = int(in_client("python3", "-B", str(DOWNLOAD), ALLOWED_V4, str(BULK_PORT), timeout=60).stdout)
+            other = int(in_client("python3", "-B", str(DOWNLOAD), OTHER_V4, str(BULK_PORT), timeout=60).stdout)
+            self.assertEqual((social, other), (BULK_BYTES, BULK_BYTES), "both downloads should complete")
+            engine(config, "usage", "--sample")
+            report = json.loads(engine(config, "usage", "--json", "--hours", "1").stdout)
+        finally:
+            engine(config, "disable")
+        totals = report["totals"]
+        self.assertEqual(report["methods"], ["conntrack"])
+        self.assertGreaterEqual(totals["all"], 2 * BULK_BYTES, "the interface counters must see both downloads")
+        self.assertGreaterEqual(totals["social"], 0.9 * BULK_BYTES, "social traffic must be attributed to social")
+        self.assertGreaterEqual(totals["other"], 0.9 * BULK_BYTES, "other traffic must be left out of social")
+        self.assertGreater(totals["social"] / (totals["social"] + totals["other"]), 0.4)
+        self.assertLess(totals["social"] / (totals["social"] + totals["other"]), 0.6)
+        self.assertGreaterEqual(totals["split_coverage"], 0.9)
 
 
 if __name__ == "__main__":

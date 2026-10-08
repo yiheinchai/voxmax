@@ -36,7 +36,42 @@ function defaults(overrides) {
     statusFailure: null,  // engine_status throws this message
     openFailure: null,
     planFailure: null,
+    usageMode: "split",   // "split", "unsplit" (no per-connection counters), or "empty"
+    usageFailure: null,
+    tracking: true,
     ...overrides,
+  };
+}
+
+/// The usage the engine would report for a period, with one bucket per hour or day.
+function usageFixture({ hours, bucket, mode, tracking }) {
+  const count = Math.round((hours * 3600) / bucket);
+  const now = Math.floor(Date.now() / 1000 / bucket) * bucket;
+  const buckets = [];
+  for (let i = 0; i < count && mode !== "empty"; i += 1) {
+    const other = 200000 + (i % 5) * 50000;
+    const social = 300000 + (i % 3) * 100000;
+    const start = now - (count - 1 - i) * bucket;
+    if (mode === "split") buckets.push({ start, total: other + social, social, other, split: other + social });
+    else buckets.push({ start, total: other + social, social: 0, other: 0, split: 0 });
+  }
+  const sum = (key) => buckets.reduce((acc, b) => acc + b[key], 0);
+  const all = sum("total");
+  const split = sum("split");
+  return {
+    hours,
+    bucket_seconds: bucket,
+    samples: mode === "empty" ? 0 : count,
+    last_sample: mode === "empty" ? null : now,
+    methods: mode === "split" ? ["conntrack"] : [],
+    tracking,
+    totals: {
+      all,
+      social: mode === "split" ? sum("social") : null,
+      other: mode === "split" ? sum("other") : null,
+      split_coverage: all ? split / all : null,
+    },
+    buckets,
   };
 }
 
@@ -44,6 +79,8 @@ function defaults(overrides) {
 async function installFakeEngine(page, overrides = {}) {
   const options = defaults(overrides);
   await page.addInitScript((opts) => {
+    // The init script runs in the page, so the usage helper travels as source text.
+    const usageFixture = eval("(" + opts.fixtureSource + ")");
     const state = {
       options: { ...opts },
       status: { ...opts.status },
@@ -95,6 +132,10 @@ async function installFakeEngine(page, overrides = {}) {
         if (state.options.applyCancel) throw DENIED;
         return "refreshed";
       },
+      engine_usage: async ({ hours, bucket }) => {
+        if (state.options.usageFailure) throw state.options.usageFailure;
+        return usageFixture({ hours, bucket, mode: state.options.usageMode, tracking: state.options.tracking });
+      },
       open_allowlist: async () => {
         if (state.options.openFailure) throw state.options.openFailure;
         return null;
@@ -121,7 +162,7 @@ async function installFakeEngine(page, overrides = {}) {
         },
       },
     };
-  }, options);
+  }, { ...options, fixtureSource: usageFixture.toString() });
 }
 
 /// Opens the interface and waits until the first status read has been shown.
