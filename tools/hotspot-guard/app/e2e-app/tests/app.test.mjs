@@ -124,6 +124,15 @@ test("the app starts, reads the engine, and writes its allowlist to the app data
   assert.match(readFileSync(CONFIG, "utf8"), /^\[social\]$/m);
 });
 
+test("the interface uses the Liquid Glass style", async () => {
+  // The running app must show the glass surfaces, so this also proves the rebuilt UI is what ran.
+  const filter = await driver.executeScript(() => {
+    const style = getComputedStyle(document.querySelector(".sidebar"));
+    return style.backdropFilter || style.webkitBackdropFilter || "";
+  });
+  assert.match(filter, /blur/, "the sidebar should be a glass surface with a backdrop blur");
+});
+
 test("Allowed Groups lists the real allowlist groups", async () => {
   await pane("allowed");
   await waitForVisible("pane-allowed");

@@ -10,34 +10,52 @@ async function bodyBackground(page) {
 }
 
 test.describe("appearance", () => {
-  test("light appearance uses the light content background", async ({ page }) => {
+  test("light appearance uses the light base colour behind the glass", async ({ page }) => {
     await page.emulateMedia({ colorScheme: "light" });
     await openApp(page);
-    expect(await bodyBackground(page)).toBe("rgb(245, 245, 247)");
+    expect(await bodyBackground(page)).toBe("rgb(236, 238, 243)");
   });
 
-  test("dark appearance uses the dark content background", async ({ page }) => {
+  test("dark appearance uses the dark base colour behind the glass", async ({ page }) => {
     await page.emulateMedia({ colorScheme: "dark" });
     await openApp(page);
-    expect(await bodyBackground(page)).toBe("rgb(30, 30, 32)");
+    expect(await bodyBackground(page)).toBe("rgb(18, 18, 22)");
     await expect(page.locator("#block-switch")).not.toBeChecked();
     await expect(page.locator(".grouped").first()).toBeVisible();
   });
 
-  test("macOS gets a transparent sidebar for the system material and room for the window buttons", async ({ page }) => {
+  test("macOS gets a glass sidebar over the window material, with room for the window buttons", async ({ page }) => {
     await openApp(page, { platform: "macos" });
     await expect(page.locator("html")).toHaveAttribute("data-platform", "macos");
-    const sidebar = await page.evaluate(() => getComputedStyle(document.querySelector(".sidebar")).backgroundColor);
-    expect(sidebar).toBe("rgba(0, 0, 0, 0)");
+    const glass = await glassOf(page, ".sidebar");
+    expect(glass.filter).toContain("blur");
+    expect(glass.alpha).toBeLessThan(1);
     const chrome = await page.evaluate(() => document.querySelector(".sidebar-chrome").getBoundingClientRect().height);
     expect(chrome).toBeGreaterThanOrEqual(40);
   });
 
-  test("Windows and Linux keep a solid sidebar with their own title bar", async ({ page }) => {
+  test("Windows and Linux get the same glass sidebar, with their own title bar", async ({ page }) => {
     await openApp(page, { platform: "windows" });
     await expect(page.locator("html")).toHaveAttribute("data-platform", "windows");
-    const sidebar = await page.evaluate(() => getComputedStyle(document.querySelector(".sidebar")).backgroundColor);
-    expect(sidebar).not.toBe("rgba(0, 0, 0, 0)");
+    const glass = await glassOf(page, ".sidebar");
+    expect(glass.filter).toContain("blur");
+    expect(glass.alpha).toBeLessThan(1);
+  });
+
+  test("the toolbar, the sidebar and the buttons are all glass, and the content cells are not", async ({ page }) => {
+    await openApp(page);
+    for (const selector of [".sidebar", ".toolbar", ".btn"]) {
+      expect((await glassOf(page, selector)).filter, selector).toContain("blur");
+    }
+    expect((await glassOf(page, ".grouped")).filter).not.toContain("blur(28px)");
+  });
+
+  test("sheets and alerts use the stronger modal glass", async ({ page }) => {
+    await openApp(page);
+    await page.locator("#preview-btn").click();
+    const modal = await glassOf(page, ".sheet");
+    expect(modal.filter).toContain("blur(40px)");
+    await page.keyboard.press("Escape");
   });
 
   test("reduced motion removes the switch animation", async ({ page }) => {
@@ -47,6 +65,17 @@ test.describe("appearance", () => {
     expect(parseFloat(duration)).toBeLessThan(0.001);  // 0.01ms, reported as seconds
   });
 });
+
+/** The backdrop filter and the alpha of a surface, read from its computed style. */
+async function glassOf(page, selector) {
+  return page.evaluate((sel) => {
+    const style = getComputedStyle(document.querySelector(sel));
+    const match = style.backgroundColor.match(/rgba?\(([^)]+)\)/);
+    const parts = match ? match[1].split(",").map((part) => part.trim()) : [];
+    const alpha = parts.length === 4 ? Number(parts[3]) : 1;
+    return { filter: style.backdropFilter || style.webkitBackdropFilter || "", alpha };
+  }, selector);
+}
 
 test.describe("layout", () => {
   test("the smallest window fits without horizontal scrolling", async ({ page }) => {

@@ -1,34 +1,56 @@
-/* Hotspot Guard. Styled after macOS: system fonts and colours, grouped inset lists,
-   a sidebar with a translucent material on macOS, and light and dark appearance. */
+/* Hotspot Guard. A Liquid Glass look in the style of macOS 26 and later.
+
+   Glass is for the navigation layer and for things that float above content: the sidebar,
+   the toolbar, buttons, segmented controls, and sheets and alerts. Content (groups, cards,
+   logs) sits on a lighter cell surface, so text stays easy to read. Each glass surface
+   refracts a soft colour field behind the window, drawn by .window::before.
+
+   The web view cannot run the system compositor, so the refraction is an approximation:
+   a blurred, saturated backdrop with specular edges. Where the system asks for reduced
+   transparency, or the engine lacks backdrop filters, surfaces turn solid. */
 
 :root {
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 
   --label: #1d1d1f;
-  --secondary: rgba(60, 60, 67, 0.62);
+  --secondary: rgba(60, 60, 67, 0.66);
   --tertiary: rgba(60, 60, 67, 0.36);
-  --separator: rgba(60, 60, 67, 0.16);
-  --bg-content: #f5f5f7;
-  --bg-cell: #ffffff;
-  --bg-sidebar: #e9e9ec;
-  --bg-toolbar: rgba(246, 246, 248, 0.92);
-  --bg-overlay: rgba(0, 0, 0, 0.22);
-  --bg-sheet: #f5f5f7;
-  --control: #ffffff;
-  --control-edge: rgba(0, 0, 0, 0.14);
-  --switch-off: rgba(120, 120, 128, 0.32);
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
+  --separator: rgba(60, 60, 67, 0.14);
+  --bg-base: #eceef3;
+  --bg-overlay: rgba(12, 14, 22, 0.16);
 
-  --accent: #007aff;
+  /* Glass: translucent fill, a blur that refracts the colour behind, and a bright edge. */
+  --glass-fill: rgba(255, 255, 255, 0.5);
+  --glass-fill-strong: rgba(255, 255, 255, 0.82);
+  --glass-fill-hover: rgba(255, 255, 255, 0.94);
+  --glass-modal: rgba(246, 247, 250, 0.82);
+  --glass-edge: rgba(255, 255, 255, 0.78);
+  --glass-blur: blur(28px) saturate(185%);
+  --glass-blur-strong: blur(40px) saturate(200%);
+  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.92), inset 0 -0.5px 0 rgba(255, 255, 255, 0.35);
+  --glass-shadow: 0 10px 30px rgba(20, 30, 60, 0.13), 0 2px 6px rgba(20, 30, 60, 0.07);
+
+  /* Cells: the content layer. Lighter than glass, with a faint blur only. */
+  --cell: rgba(255, 255, 255, 0.66);
+  --cell-edge: rgba(255, 255, 255, 0.7);
+  --cell-blur: blur(14px) saturate(140%);
+  --cell-shadow: 0 1px 2px rgba(20, 30, 60, 0.05), 0 4px 14px rgba(20, 30, 60, 0.05);
+
+  --control-edge: rgba(0, 0, 0, 0.08);
+  --switch-off: rgba(120, 120, 128, 0.3);
+
+  --accent: #0a84ff;
+  --accent-strong: #0a7aff;
   --green: #34c759;
   --orange: #ff9500;
   --red: #ff3b30;
-  --tint-on: rgba(52, 199, 89, 0.16);
-  --tint-warn: rgba(255, 149, 0, 0.16);
-  --tint-off: rgba(120, 120, 128, 0.14);
-  --warn-text: #a85a00;
   --chart-social: #ff9500;
+  --chart-other: #0a84ff;
+  --tint-on: rgba(52, 199, 89, 0.18);
+  --tint-warn: rgba(255, 149, 0, 0.2);
+  --tint-off: rgba(120, 120, 128, 0.16);
+  --warn-text: #a85a00;
   --sidebar-selected-text: #ffffff;
   color-scheme: light;
 }
@@ -36,57 +58,104 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --label: #f5f5f7;
-    --secondary: rgba(235, 235, 245, 0.6);
+    --secondary: rgba(235, 235, 245, 0.64);
     --tertiary: rgba(235, 235, 245, 0.3);
-    --separator: rgba(84, 84, 88, 0.6);
-    --bg-content: #1e1e20;
-    --bg-cell: #2c2c2e;
-    --bg-sidebar: #252527;
-    --bg-toolbar: rgba(38, 38, 40, 0.92);
-    --bg-overlay: rgba(0, 0, 0, 0.45);
-    --bg-sheet: #2c2c2e;
-    --control: #3a3a3c;
-    --control-edge: rgba(255, 255, 255, 0.12);
-    --switch-off: rgba(120, 120, 128, 0.36);
-    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --separator: rgba(255, 255, 255, 0.1);
+    --bg-base: #121216;
+    --bg-overlay: rgba(0, 0, 0, 0.42);
+    --glass-fill: rgba(72, 72, 82, 0.42);
+    --glass-fill-strong: rgba(96, 96, 108, 0.62);
+    --glass-fill-hover: rgba(112, 112, 126, 0.72);
+    --glass-modal: rgba(44, 44, 50, 0.8);
+    --glass-edge: rgba(255, 255, 255, 0.2);
+    --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.24), inset 0 -0.5px 0 rgba(255, 255, 255, 0.06);
+    --glass-shadow: 0 12px 34px rgba(0, 0, 0, 0.48), 0 2px 6px rgba(0, 0, 0, 0.3);
+    --cell: rgba(58, 58, 66, 0.6);
+    --cell-edge: rgba(255, 255, 255, 0.1);
+    --cell-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 14px rgba(0, 0, 0, 0.24);
+    --control-edge: rgba(255, 255, 255, 0.1);
+    --switch-off: rgba(120, 120, 128, 0.4);
     --accent: #0a84ff;
+    --accent-strong: #0a84ff;
     --green: #30d158;
     --orange: #ff9f0a;
     --red: #ff453a;
-    --tint-on: rgba(48, 209, 88, 0.18);
-    --tint-warn: rgba(255, 159, 10, 0.18);
-    --tint-off: rgba(142, 142, 147, 0.18);
-    --warn-text: #ffb340;
     --chart-social: #ff9f0a;
+    --chart-other: #0a84ff;
+    --tint-on: rgba(48, 209, 88, 0.22);
+    --tint-warn: rgba(255, 159, 10, 0.24);
+    --tint-off: rgba(142, 142, 147, 0.22);
+    --warn-text: #ffb340;
     color-scheme: dark;
   }
 }
 
 :root[data-theme="dark"] {
   --label: #f5f5f7;
-  --secondary: rgba(235, 235, 245, 0.6);
+  --secondary: rgba(235, 235, 245, 0.64);
   --tertiary: rgba(235, 235, 245, 0.3);
-  --separator: rgba(84, 84, 88, 0.6);
-  --bg-content: #1e1e20;
-  --bg-cell: #2c2c2e;
-  --bg-sidebar: #252527;
-  --bg-toolbar: rgba(38, 38, 40, 0.92);
-  --bg-overlay: rgba(0, 0, 0, 0.45);
-  --bg-sheet: #2c2c2e;
-  --control: #3a3a3c;
-  --control-edge: rgba(255, 255, 255, 0.12);
-  --switch-off: rgba(120, 120, 128, 0.36);
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --separator: rgba(255, 255, 255, 0.1);
+  --bg-base: #121216;
+  --bg-overlay: rgba(0, 0, 0, 0.42);
+  --glass-fill: rgba(72, 72, 82, 0.42);
+  --glass-fill-strong: rgba(96, 96, 108, 0.62);
+  --glass-fill-hover: rgba(112, 112, 126, 0.72);
+  --glass-modal: rgba(44, 44, 50, 0.8);
+  --glass-edge: rgba(255, 255, 255, 0.2);
+  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.24), inset 0 -0.5px 0 rgba(255, 255, 255, 0.06);
+  --glass-shadow: 0 12px 34px rgba(0, 0, 0, 0.48), 0 2px 6px rgba(0, 0, 0, 0.3);
+  --cell: rgba(58, 58, 66, 0.6);
+  --cell-edge: rgba(255, 255, 255, 0.1);
+  --cell-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 14px rgba(0, 0, 0, 0.24);
+  --control-edge: rgba(255, 255, 255, 0.1);
+  --switch-off: rgba(120, 120, 128, 0.4);
   --accent: #0a84ff;
+  --accent-strong: #0a84ff;
   --green: #30d158;
   --orange: #ff9f0a;
   --red: #ff453a;
-  --tint-on: rgba(48, 209, 88, 0.18);
-  --tint-warn: rgba(255, 159, 10, 0.18);
-  --tint-off: rgba(142, 142, 147, 0.18);
-  --warn-text: #ffb340;
   --chart-social: #ff9f0a;
+  --chart-other: #0a84ff;
+  --tint-on: rgba(48, 209, 88, 0.22);
+  --tint-warn: rgba(255, 159, 10, 0.24);
+  --tint-off: rgba(142, 142, 147, 0.22);
+  --warn-text: #ffb340;
   color-scheme: dark;
+}
+
+/* Reduced transparency: the same layout, with solid surfaces and no blur. */
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --glass-fill: #f1f2f6;
+    --glass-fill-strong: #ffffff;
+    --glass-fill-hover: #ffffff;
+    --glass-modal: #f6f7fa;
+    --cell: #ffffff;
+    --cell-blur: none;
+    --glass-blur: none;
+    --glass-blur-strong: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) and (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --glass-fill: #2b2b31;
+    --glass-fill-strong: #3a3a42;
+    --glass-fill-hover: #44444d;
+    --glass-modal: #2c2c32;
+    --cell: #2c2c32;
+  }
+}
+
+/* Engines without backdrop filters get the solid fallback too. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :root {
+    --glass-blur: none;
+    --glass-blur-strong: none;
+    --cell-blur: none;
+    --glass-fill: #f1f2f6;
+    --glass-modal: #f6f7fa;
+  }
 }
 
 * { box-sizing: border-box; }
@@ -98,7 +167,7 @@ html, body {
   font-family: var(--font);
   font-size: 13px;
   color: var(--label);
-  background: var(--bg-content);
+  background: var(--bg-base);
   -webkit-font-smoothing: antialiased;
   user-select: none;
   overflow: hidden;
@@ -106,44 +175,96 @@ html, body {
 
 button, input { font: inherit; color: inherit; }
 
-/* ---- Window layout ---------------------------------------------------------------------- */
+/* ---- Window and backdrop ---------------------------------------------------------------- */
 
 .window {
+  position: relative;
+  isolation: isolate;
   display: grid;
-  grid-template-columns: 216px minmax(0, 1fr);
+  grid-template-columns: 232px minmax(0, 1fr);
   height: 100vh;
 }
 
-.sidebar {
-  display: flex;
-  flex-direction: column;
-  background: var(--bg-sidebar);
-  border-right: 0.5px solid var(--separator);
-  padding: 0 10px 12px;
-  min-height: 0;
+/* A soft colour field behind everything, so the glass has something to refract. */
+.window::before {
+  content: "";
+  position: fixed;
+  inset: -12%;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(38% 46% at 14% 18%, rgba(255, 159, 10, 0.34), transparent 72%),
+    radial-gradient(44% 52% at 84% 12%, rgba(10, 132, 255, 0.32), transparent 72%),
+    radial-gradient(48% 50% at 74% 92%, rgba(175, 82, 222, 0.26), transparent 72%),
+    radial-gradient(36% 40% at 8% 88%, rgba(52, 199, 89, 0.22), transparent 72%);
 }
 
-.sidebar-chrome { height: 12px; }
+/* ---- Glass surfaces ---------------------------------------------------------------------- */
 
-.sidebar-list { display: flex; flex-direction: column; gap: 2px; }
+.sidebar,
+.toolbar,
+.segmented,
+.banner,
+.sheet,
+.alert {
+  background: var(--glass-fill);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 0.5px solid var(--glass-edge);
+  box-shadow: var(--glass-highlight), var(--glass-shadow);
+}
+
+.sheet,
+.alert {
+  background: var(--glass-modal);
+  -webkit-backdrop-filter: var(--glass-blur-strong);
+  backdrop-filter: var(--glass-blur-strong);
+}
+
+/* Content cells: the lighter layer, so text on top stays easy to read. */
+.grouped,
+.card,
+.sheet-list {
+  background: var(--cell);
+  -webkit-backdrop-filter: var(--cell-blur);
+  backdrop-filter: var(--cell-blur);
+  border: 0.5px solid var(--cell-edge);
+  box-shadow: var(--cell-shadow);
+}
+
+/* ---- Sidebar -------------------------------------------------------------------------------- */
+
+.sidebar {
+  margin: 8px 0 8px 8px;
+  border-radius: 26px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 0 10px 12px;
+}
+
+.sidebar-chrome { height: 12px; flex: none; }
+
+.sidebar-list { display: flex; flex-direction: column; gap: 3px; margin-top: 4px; }
 
 .sidebar-item {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 10px;
   width: 100%;
-  padding: 5px 9px;
+  padding: 7px 10px;
   border: 0;
-  border-radius: 6px;
+  border-radius: 14px;
   background: transparent;
   text-align: left;
   font-size: 13px;
   cursor: default;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 .sidebar-item svg {
-  width: 16px;
-  height: 16px;
+  width: 17px;
+  height: 17px;
   flex: none;
   fill: none;
   stroke: var(--accent);
@@ -155,9 +276,10 @@ button, input { font: inherit; color: inherit; }
 .sidebar-item:hover:not(.is-selected) { background: var(--tint-off); }
 
 .sidebar-item.is-selected {
-  background: var(--accent);
+  background: linear-gradient(180deg, #4aa3ff 0%, var(--accent-strong) 100%);
   color: var(--sidebar-selected-text);
   font-weight: 500;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 2px 8px rgba(10, 122, 255, 0.32);
 }
 
 .sidebar-item.is-selected svg { stroke: var(--sidebar-selected-text); }
@@ -167,7 +289,7 @@ button, input { font: inherit; color: inherit; }
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 9px 2px;
+  padding: 12px 10px 2px;
   font-size: 12px;
   color: var(--secondary);
 }
@@ -178,17 +300,20 @@ button, input { font: inherit; color: inherit; }
   height: 8px;
   border-radius: 50%;
   background: var(--switch-off);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.35);
 }
 
 .status-dot.is-on { background: var(--green); }
 .status-dot.is-stale { background: var(--orange); }
+
+/* ---- Content and toolbar ------------------------------------------------------------------ */
 
 .content {
   display: flex;
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  background: var(--bg-content);
+  padding: 8px 8px 8px 12px;
 }
 
 .toolbar {
@@ -198,9 +323,9 @@ button, input { font: inherit; color: inherit; }
   justify-content: space-between;
   gap: 12px;
   height: 52px;
-  padding: 0 18px;
-  background: var(--bg-toolbar);
-  border-bottom: 0.5px solid var(--separator);
+  margin-bottom: 8px;
+  padding: 0 8px 0 20px;
+  border-radius: 22px;
 }
 
 .toolbar-title {
@@ -215,22 +340,22 @@ button, input { font: inherit; color: inherit; }
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 6px 24px 28px;
+  padding: 6px 12px 28px 8px;
 }
 
-.pane { max-width: 620px; }
+.pane { max-width: 640px; }
 
 .banner {
   flex: none;
-  margin: 12px 18px 0;
-  padding: 9px 12px;
-  border-radius: 8px;
+  margin: 0 0 8px;
+  padding: 10px 14px;
+  border-radius: 16px;
   background: var(--tint-warn);
   color: var(--warn-text);
   font-size: 12px;
 }
 
-/* ---- Typography ------------------------------------------------------------------------- */
+/* ---- Typography -------------------------------------------------------------------------- */
 
 .muted { color: var(--secondary); margin: 0; line-height: 1.45; }
 .intro { margin: 12px 4px 0; font-size: 12px; }
@@ -238,7 +363,7 @@ button, input { font: inherit; color: inherit; }
 .warn { margin: 0; font-size: 12px; color: var(--warn-text); }
 
 .group-label {
-  margin: 20px 4px 6px;
+  margin: 20px 6px 7px;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.02em;
@@ -250,18 +375,20 @@ button, input { font: inherit; color: inherit; }
   display: flex;
   align-items: center;
   gap: 16px;
-  margin: 12px 0 4px;
+  margin: 10px 0 4px;
 }
 
 .hero-icon {
   flex: none;
-  width: 56px;
-  height: 56px;
-  border-radius: 14px;
+  width: 60px;
+  height: 60px;
+  border-radius: 20px;
   display: grid;
   place-items: center;
   background: var(--tint-off);
   color: var(--secondary);
+  border: 0.5px solid var(--glass-edge);
+  box-shadow: var(--glass-highlight), var(--glass-shadow);
 }
 
 .hero-icon svg {
@@ -278,18 +405,16 @@ button, input { font: inherit; color: inherit; }
 
 .hero h2 {
   margin: 0 0 3px;
-  font-size: 20px;
+  font-size: 21px;
   font-weight: 600;
 }
 
 .hero p { font-size: 13px; }
 
-/* ---- Grouped inset lists ---------------------------------------------------------------- */
+/* ---- Grouped cells ------------------------------------------------------------------------ */
 
 .grouped {
-  background: var(--bg-cell);
-  border-radius: 10px;
-  box-shadow: var(--shadow);
+  border-radius: 22px;
   overflow: hidden;
 }
 
@@ -297,8 +422,8 @@ button, input { font: inherit; color: inherit; }
   display: flex;
   align-items: center;
   gap: 14px;
-  min-height: 44px;
-  padding: 8px 14px;
+  min-height: 46px;
+  padding: 9px 16px;
 }
 
 .row + .row { border-top: 0.5px solid var(--separator); }
@@ -317,39 +442,48 @@ button, input { font: inherit; color: inherit; }
   text-align: right;
 }
 
-.group-row .row-text { min-width: 0; }
 .group-row .row-title { text-transform: none; }
 
-/* ---- Buttons ---------------------------------------------------------------------------- */
+.row.placeholder { justify-content: center; text-align: center; }
+.row.placeholder .row-title { flex: none; }
+
+/* ---- Buttons ------------------------------------------------------------------------------ */
 
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 24px;
-  padding: 3px 12px;
-  border: 0.5px solid var(--control-edge);
-  border-radius: 6px;
-  background: var(--control);
-  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.06);
+  min-height: 28px;
+  padding: 4px 14px;
+  border: 0.5px solid var(--glass-edge);
+  border-radius: 999px;
+  background: var(--glass-fill-strong);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-highlight), 0 1px 3px rgba(0, 0, 0, 0.08);
   font-size: 13px;
   line-height: 1.2;
-  cursor: default;
   white-space: nowrap;
+  cursor: default;
+  transition: background-color 0.2s ease, transform 0.12s ease;
 }
 
-.btn:hover { filter: brightness(1.03); }
-.btn:active { filter: brightness(0.94); }
+.btn:hover { background: var(--glass-fill-hover); }
+.btn:active { transform: scale(0.97); }
 
 .btn-prominent {
-  background: var(--accent);
-  border-color: transparent;
+  background: linear-gradient(180deg, #4aa3ff 0%, var(--accent-strong) 100%);
+  border-color: rgba(255, 255, 255, 0.35);
   color: #ffffff;
   font-weight: 500;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), 0 2px 8px rgba(10, 122, 255, 0.32);
 }
+
+.btn-prominent:hover { background: linear-gradient(180deg, #5cb0ff 0%, #1a8cff 100%); }
 
 .btn:focus-visible,
 .sidebar-item:focus-visible,
+.segment:focus-visible,
 .switch input:focus-visible + .track {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -359,9 +493,9 @@ button, input { font: inherit; color: inherit; }
 .switch input:disabled ~ .track,
 .switch input:disabled ~ .thumb { opacity: 0.45; }
 
-.btn:disabled { cursor: default; filter: none; }
+.btn:disabled { cursor: default; filter: none; transform: none; }
 
-/* ---- Switch (macOS-style toggle, 51 x 31) ----------------------------------------------- */
+/* ---- Switch: a glass knob on a tinted track (51 x 31) ------------------------------------ */
 
 .switch {
   position: relative;
@@ -388,7 +522,8 @@ button, input { font: inherit; color: inherit; }
   inset: 0;
   border-radius: 16px;
   background: var(--switch-off);
-  transition: background-color 0.2s ease;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.12);
+  transition: background-color 0.25s ease;
 }
 
 .switch .thumb {
@@ -398,15 +533,43 @@ button, input { font: inherit; color: inherit; }
   width: 27px;
   height: 27px;
   border-radius: 50%;
-  background: #ffffff;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.22), 0 0 0 0.5px rgba(0, 0, 0, 0.04);
-  transition: transform 0.2s ease;
+  background: radial-gradient(circle at 35% 30%, #ffffff 0%, #f4f5f8 70%, #e4e6ec 100%);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.22), 0 0 0 0.5px rgba(0, 0, 0, 0.04), inset 0 -1px 0 rgba(0, 0, 0, 0.06);
+  transition: transform 0.25s cubic-bezier(0.3, 0.7, 0.4, 1.2);
 }
 
-.switch input:checked ~ .track { background: var(--green); }
+.switch input:checked ~ .track {
+  background: linear-gradient(180deg, #4ce06f 0%, var(--green) 100%);
+}
+
 .switch input:checked ~ .thumb { transform: translateX(20px); }
 
-/* ---- Overlays: sheet (drops from the toolbar) and alert --------------------------------- */
+/* ---- Segmented control (glass capsule with a glass selection) --------------------------- */
+
+.segmented {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 999px;
+}
+
+.segment {
+  border: 0;
+  padding: 5px 14px;
+  border-radius: 999px;
+  background: transparent;
+  font-size: 12px;
+  cursor: default;
+  white-space: nowrap;
+  transition: background-color 0.2s ease;
+}
+
+.segment.is-selected {
+  background: var(--glass-fill-strong);
+  box-shadow: var(--glass-highlight), 0 1px 3px rgba(0, 0, 0, 0.1);
+  font-weight: 500;
+}
+
+/* ---- Overlays: sheet (drops from the toolbar) and alert ---------------------------------- */
 
 .overlay {
   position: fixed;
@@ -414,28 +577,29 @@ button, input { font: inherit; color: inherit; }
   z-index: 10;
   display: flex;
   background: var(--bg-overlay);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
 }
 
-#sheet { align-items: flex-start; justify-content: center; padding-top: 58px; }
+#sheet { align-items: flex-start; justify-content: center; padding-top: 66px; }
 
 .sheet {
   width: min(540px, calc(100vw - 48px));
-  max-height: calc(100vh - 100px);
+  max-height: calc(100vh - 110px);
   display: flex;
   flex-direction: column;
   gap: 14px;
-  padding: 20px 22px 18px;
-  background: var(--bg-sheet);
-  border-radius: 12px;
-  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.28), 0 0 0 0.5px rgba(0, 0, 0, 0.12);
+  padding: 22px 24px 20px;
+  border-radius: 28px;
 }
 
-.sheet h2 { margin: 0 0 4px; font-size: 16px; font-weight: 600; }
+.sheet h2 { margin: 0 0 4px; font-size: 17px; font-weight: 600; }
 
 .sheet-list {
   min-height: 0;
   flex: 1;
   overflow-y: auto;
+  border-radius: 18px;
 }
 
 .sheet-list ul { list-style: none; margin: 0; padding: 0; }
@@ -444,7 +608,7 @@ button, input { font: inherit; color: inherit; }
   display: flex;
   justify-content: space-between;
   gap: 16px;
-  padding: 7px 14px;
+  padding: 8px 16px;
   font-size: 13px;
 }
 
@@ -457,58 +621,16 @@ button, input { font: inherit; color: inherit; }
 
 .alert {
   width: 300px;
-  padding: 20px 22px 18px;
+  padding: 22px 22px 18px;
   text-align: center;
-  background: var(--bg-sheet);
-  border-radius: 14px;
-  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.3), 0 0 0 0.5px rgba(0, 0, 0, 0.12);
+  border-radius: 26px;
 }
 
 .alert h2 { margin: 0 0 8px; font-size: 15px; font-weight: 600; }
 .alert p { margin: 0 0 16px; font-size: 13px; line-height: 1.4; color: var(--secondary); overflow-wrap: anywhere; }
 .alert .sheet-actions { justify-content: center; }
 
-/* ---- Log -------------------------------------------------------------------------------- */
-
-.log pre {
-  margin: 0;
-  padding: 12px 14px;
-  max-height: calc(100vh - 230px);
-  overflow: auto;
-  font-family: var(--mono);
-  font-size: 11.5px;
-  line-height: 1.55;
-  white-space: pre-wrap;
-  user-select: text;
-  color: var(--label);
-}
-
-/* ---- macOS: translucent sidebar, overlay title bar, traffic lights in the sidebar -------- */
-
-[data-platform="macos"] html,
-[data-platform="macos"] body { background: transparent; }
-
-[data-platform="macos"] .window { background: transparent; }
-
-[data-platform="macos"] .sidebar {
-  background: transparent;
-  border-right: 0;
-  padding-top: 0;
-}
-
-[data-platform="macos"] .sidebar-chrome { height: 40px; }
-
-[data-platform="macos"] .content { background: var(--bg-content); }
-
-[data-platform="macos"] .toolbar { padding-left: 20px; }
-
-[data-platform="macos"] .sidebar-item { padding: 5px 9px; }
-
-/* Empty and loading states inside a grouped list */
-.row.placeholder { justify-content: center; text-align: center; }
-.row.placeholder .row-title { flex: none; }
-
-/* ---- Data usage ----------------------------------------------------------------------- */
+/* ---- Data usage ---------------------------------------------------------------------------- */
 
 .pane-wide { max-width: 760px; }
 
@@ -520,31 +642,6 @@ button, input { font: inherit; color: inherit; }
   margin: 10px 0 2px;
 }
 
-.segmented {
-  display: inline-flex;
-  padding: 2px;
-  border-radius: 8px;
-  background: var(--tint-off);
-}
-
-.segment {
-  border: 0;
-  padding: 4px 12px;
-  border-radius: 6px;
-  background: transparent;
-  font-size: 12px;
-  cursor: default;
-  white-space: nowrap;
-}
-
-.segment.is-selected {
-  background: var(--control);
-  box-shadow: var(--shadow);
-  font-weight: 500;
-}
-
-.segment:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-
 .usage-cards {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -554,9 +651,7 @@ button, input { font: inherit; color: inherit; }
 
 .card {
   padding: 14px 16px;
-  background: var(--bg-cell);
-  border-radius: 10px;
-  box-shadow: var(--shadow);
+  border-radius: 22px;
   min-width: 0;
 }
 
@@ -592,9 +687,9 @@ button, input { font: inherit; color: inherit; }
 }
 
 .swatch-social { background: var(--chart-social); }
-.swatch-other { background: var(--accent); }
+.swatch-other { background: var(--chart-other); }
 
-.chart-box { padding: 14px 14px 8px; }
+.chart-box { padding: 16px 16px 10px; }
 
 .usage-chart {
   display: block;
@@ -602,7 +697,7 @@ button, input { font: inherit; color: inherit; }
   height: 190px;
 }
 
-.usage-chart .bar-other { fill: var(--accent); }
+.usage-chart .bar-other { fill: var(--chart-other); }
 .usage-chart .bar-social { fill: var(--chart-social); }
 .usage-chart .bar-unsplit { fill: var(--tertiary); }
 
@@ -615,7 +710,23 @@ button, input { font: inherit; color: inherit; }
   font-variant-numeric: tabular-nums;
 }
 
-/* Respect the system setting for reduced motion */
+/* ---- Log ----------------------------------------------------------------------------------- */
+
+.log pre {
+  margin: 0;
+  padding: 14px 16px;
+  max-height: calc(100vh - 240px);
+  overflow: auto;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  user-select: text;
+  color: var(--label);
+}
+
+/* ---- Switch and motion preferences -------------------------------------------------------- */
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     transition-duration: 0.01ms !important;
@@ -623,6 +734,18 @@ button, input { font: inherit; color: inherit; }
   }
 }
 
-/* Windows and Linux draw their own title bar, so the sidebar gets a plain background. */
+/* ---- macOS: the window's own material shows through the glass, and the sidebar clears the
+   traffic-light buttons at the top -------------------------------------------------------- */
+
+[data-platform="macos"] html,
+[data-platform="macos"] body { background: transparent; }
+
+[data-platform="macos"] .window { background: transparent; }
+
+[data-platform="macos"] .sidebar-chrome { height: 40px; }
+
+[data-platform="macos"] .toolbar { padding-left: 20px; }
+
+/* Windows and Linux draw their own title bar, so the sidebar sits a little higher. */
 [data-platform="windows"] .sidebar-chrome,
 [data-platform="linux"] .sidebar-chrome { height: 8px; }

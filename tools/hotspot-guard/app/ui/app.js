@@ -286,7 +286,7 @@ function renderChart(buckets, view) {
       if (!amount) return;
       const h = (amount / max) * (height - 4);
       top -= h;
-      markup += `<rect x="${x}" y="${top.toFixed(1)}" width="${barWidth.toFixed(1)}" height="${h.toFixed(1)}" class="${className}"/>`;
+      markup += `<rect x="${x}" y="${top.toFixed(1)}" width="${barWidth.toFixed(1)}" height="${h.toFixed(1)}" rx="4" class="${className}"/>`;
     };
     if (view === "all") {
       segment(bucket.other, "bar-other");

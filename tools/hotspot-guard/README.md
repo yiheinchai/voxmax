@@ -23,11 +23,12 @@ from a desktop app or the command line. The engine is standard-library Python,
 
 ## Desktop app
 
-`app/` is a Tauri app for Windows, macOS and Linux. Its interface is styled after
-macOS: a sidebar with a translucent material on macOS, grouped inset lists,
-switches, sheets and alerts, in light and dark appearance. It is a web
-imitation, not native AppKit controls, so it will not look identical to a
-System Settings pane.
+`app/` is a Tauri app for Windows, macOS and Linux. Its interface uses a Liquid Glass
+style: a floating glass sidebar and toolbar, glass buttons and controls, and content
+cells that stay readable on a coloured backdrop. Light and dark appearance both follow
+the system setting, and reduced transparency turns the glass solid. It is a web
+approximation of Liquid Glass, not the system compositor, so the refraction looks close
+to native but is not identical. Sizes and motion follow the reduced-motion setting.
 
 Sections:
 - **Blocking**: the main switch, the watcher state, and the Apply Changes or Clear Rules
